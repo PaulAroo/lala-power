@@ -5,6 +5,7 @@
 
 #include "ast.hpp"
 #include "z.hpp"
+#include "arithmetic.hpp"
 #include "vector.hpp"
 #include "shared_ptr.hpp"
 
@@ -17,17 +18,22 @@ public:
   using BranchType = typename Split::BranchType;
   using TellType = A::TellType;
 
+  using APtr = battery::shared_ptr<A, Allocator>;
+  using SplitPtr = battery::shared_ptr<Split, Allocator>;
+  using this_type = SearchTree<A, Split>;
+
 private:
   AType uid_;
-  battery::shared_ptr<A, Allocator> a;
-  Split split;
-  vector<BranchType> path;
+  APtr a;
+  SplitPtr split;
+  battery::vector<BranchType, Allocator> path;
   A::Snapshot root;
   BDec is_at_bot;
 
 public:
-  CUDA SearchTree(AType uid, battery::shared_ptr<A, Allocator> a, Split&& split)
-   : uid_(uid), a(std::move(a)), split(std::move(split)), root(a->snapshot()), is_at_bot(BDec::bot())
+  CUDA SearchTree(AType uid, APtr a, SplitPtr split)
+   : uid_(uid), a(std::move(a)), split(std::move(split)),
+     root(this->a->snapshot()), is_at_bot(BDec::bot())
   {}
 
   CUDA AType uid() const {
@@ -35,7 +41,7 @@ public:
   }
 
   CUDA BInc is_top() const {
-    return BInc(lnot(is_at_bot).guard() && path.is_empty());
+    return BInc(lnot(is_at_bot).guard() && path.empty());
   }
 
   CUDA BDec is_bot() const {
@@ -55,19 +61,14 @@ public:
     return *this;
   }
 
-  /** The refinement of `a` is not done here, and if needed, must be done before calling this method.
+  /** The refinement of `a` and `split` is not done here, and if needed, must be done before calling this method.
    * This refinement operator computes \f$ \mathit{pop} \circ \mathit{push} \circ \mathit{split} \f$.
    * It initializes `a` to the next node of the search tree.
    * Therefore, `a` can backtrack, hence does not always evolve extensively and monotonically.
    * Nevertheless, the refinement operator of the search tree abstract domain is extensive and monotonic (if split is). */
-  CUDA void refine(int i, BInc& has_changed) {
-    bool backtrack = true;
-    split.refine(i, has_changed);
-    barrier();
-    if(i == 0) {
-      // We backtrack if no branch was pushed, it means we reached a leaf.
-      pop(!push(split.split()), has_changed);
-    }
+  CUDA void refine(BInc& has_changed) {
+    // We backtrack if no branch was pushed, it means we reached a leaf.
+    pop(!push(split->split()), has_changed);
   }
 
 private:
@@ -76,20 +77,21 @@ private:
       a->tell(path.back().next(), has_changed);
     }
     else {
-      while(!path.is_empty() && !path.back().has_next()) {
+      while(!path.empty() && !path.back().has_next()) {
         path.pop_back();
       }
-      if(!path.is_empty()) {
+      if(!path.empty()) {
+        has_changed.tell(BInc::top());
         path.back().next();
         a->restore(root);
-        replay();
+        replay(has_changed);
       }
     }
   }
 
-  CUDA void replay() {
+  CUDA void replay(BInc& has_changed) {
     for(int i = 0; i < path.size(); ++i) {
-      a->tell(path[i].current());
+      a->tell(path[i].current(), has_changed);
     }
   }
 

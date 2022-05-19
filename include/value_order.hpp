@@ -29,6 +29,7 @@ public:
   /** Create two formulas of the form `x = lb \/ x > lb`.
    *  We suppose that `a` is able to interpret those constraints. */
   CUDA BranchType split(AVar x) const {
+    using F = TFormula<Allocator>;
     auto lb = a->project(x).lb().value();
     return Branch(battery::vector<TellType, Allocator>({
         *(a->interpret(F::make_binary(F::make_avar(x), EQ, F::make_z(lb), UNTYPED, appx, a->get_allocator()))),

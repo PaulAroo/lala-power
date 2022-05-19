@@ -16,13 +16,13 @@ public:
 
 private:
   battery::vector<TellType, Allocator> children;
-  int current;
+  int current_idx;
 
 public:
-  CUDA Branch(): children(), current(-1) {}
+  CUDA Branch(): children(), current_idx(-1) {}
   CUDA Branch(Branch&&) = default;
-  CUDA Branch(battery::vector<TellType, Allocator> &&children)
-   : children(std::move(children)), current(-1) {}
+  CUDA Branch(battery::vector<TellType, Allocator>&& children)
+   : children(std::move(children)), current_idx(-1) {}
 
   CUDA int size() const {
     return children.size();
@@ -30,20 +30,24 @@ public:
 
   CUDA const TellType& next() {
     assert(has_next());
-    return children[++current];
+    return children[++current_idx];
   }
 
   CUDA bool has_next() const {
-    return current + 1 < children.size();
+    return current_idx + 1 < size();
+  }
+
+  CUDA void prune() {
+    current_idx = size();
   }
 
   CUDA bool is_pruned() const {
-    return current >= children.size();
+    return current_idx >= size();
   }
 
   CUDA const TellType& current() const {
-    assert(!is_pruned() && current != -1);
-    return children[current];
+    assert(!is_pruned() && current_idx != -1);
+    return children[current_idx];
   }
 };
 

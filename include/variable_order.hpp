@@ -18,7 +18,7 @@ public:
   using TellType = typename A::TellType;
   using LVarArray = battery::vector<LVar<Allocator>, Allocator>;
 
-private:
+protected:
   battery::vector<AVar, Allocator> vars;
   battery::shared_ptr<A, Allocator> a;
 
@@ -28,7 +28,7 @@ public:
     const auto& env = a->environment();
     vars.reserve(env.size());
     for(int i = 0; i < env.size(); ++i) {
-      vars.push_back(make_var(a->ad_uid(), i));
+      vars.push_back(make_var(a->uid(), i));
     }
   }
 
@@ -48,37 +48,38 @@ public:
   using LVarArray = VariableOrder<A>::LVarArray;
 
 private:
-  ZDec smallest;
+  ZDec<int> smallest;
 
 public:
   CUDA InputOrder(InputOrder&&) = default;
-  CUDA InputOrder(battery::shared_ptr<A, Allocator> a): VariableOrder(std::move(a)), smallest(ZDec::bot()) {}
+  CUDA InputOrder(battery::shared_ptr<A, Allocator> a): VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
 
-  CUDA InputOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars): VariableOrder(std::move(a)), smallest(ZDec::bot()) {}
+  CUDA InputOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars): VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
 
-  CUDA int num_refinements() {
-    return vars.size();
+  CUDA int num_refinements() const {
+    return this->vars.size();
   }
 
-  CUDA void restore() {
-    smallest.dtell(ZDec::bot());
+  CUDA void reset() {
+    smallest.dtell(ZDec<int>::bot());
   }
 
   CUDA void refine(int i, BInc& has_changed) {
-    if(i < vars.size()) {
-      const auto& x = a->project(vars[i]);
+    if(i < this->vars.size()) {
+      using D = A::Universe;
+      const D& x = this->a->project(this->vars[i]);
       // This condition is actually monotone under the assumption that x is not updated anymore between two invocations of this refine function.
-      if(lt<A::Universe>(x.lb(), x.ub()).value()) {
-        smallest.tell(ZDec(i), has_changed);
+      if(lt<typename D::LB>(x.lb(), x.ub()).value()) {
+        smallest.tell(ZDec<int>(i), has_changed);
       }
     }
   }
 
   CUDA thrust::optional<AVar> project() const {
-    if(smallest.is_bot()) {
+    if(smallest.is_bot().value()) {
       return {};
     }
-    return vars[smallest.value()];
+    return this->vars[smallest.value()];
   }
 };
 
