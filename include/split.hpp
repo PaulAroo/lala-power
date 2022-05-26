@@ -13,15 +13,25 @@ namespace lala {
 template <class A, class VariableOrder, class ValueOrder>
 class Split {
 public:
+  using Allocator = typename A::Allocator;
   using BranchType = typename ValueOrder::BranchType;
 
 private:
+  AType uid_;
   VariableOrder var_order;
   ValueOrder val_order;
 
 public:
-  CUDA Split(VariableOrder&& var_order, ValueOrder&& val_order)
-  : var_order(std::move(var_order)), val_order(std::move(val_order)) {}
+  CUDA Split(AType uid, VariableOrder&& var_order, ValueOrder&& val_order)
+  : uid_(uid), var_order(std::move(var_order)), val_order(std::move(val_order)) {}
+
+  template<class A2, class VarO2, class ValO2>
+  CUDA Split(const Split<A2, VarO2, ValO2>& other, AbstractDeps<Allocator>& deps)
+   : uid_(other.uid_), var_order(other.var_order, deps), val_order(other.val_order, deps) {}
+
+  CUDA AType uid() const {
+    return uid_;
+  }
 
   CUDA int num_refinements() const {
     return var_order.num_refinements();

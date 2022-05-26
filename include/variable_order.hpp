@@ -39,6 +39,10 @@ public:
       vars.push_back(*(env.to_avar(lvars[i])));
     }
   }
+
+  template<class A2>
+  CUDA VariableOrder(const VariableOrder<A2>& other, AbstractDeps<Allocator>& deps)
+   : vars(other.vars), a(deps.clone(other.a)) {}
 };
 
 template <class A>
@@ -52,9 +56,14 @@ private:
 
 public:
   CUDA InputOrder(InputOrder&&) = default;
-  CUDA InputOrder(battery::shared_ptr<A, Allocator> a): VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
+  CUDA InputOrder(battery::shared_ptr<A, Allocator> a)
+   : VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
+  CUDA InputOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars)
+   : VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
 
-  CUDA InputOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars): VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
+  template<class A2>
+  CUDA InputOrder(const InputOrder<A2>& other, AbstractDeps<Allocator>& deps)
+   : VariableOrder<A>(other, deps), smallest(other.smallest) {}
 
   CUDA int num_refinements() const {
     return this->vars.size();

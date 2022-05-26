@@ -38,6 +38,8 @@ using IStore = VStore<Itv, StandardAllocator>;
 
 const AType sty = 0;
 const AType tty = 1;
+const AType split_ty = 2;
+const AType bab_ty = 3;
 
 template <typename U, typename F>
 void tell_store(VStore<U, StandardAllocator>& store, F f, const LVar<StandardAllocator>& x, U v) {

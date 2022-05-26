@@ -26,6 +26,10 @@ public:
   CUDA LowerBound(battery::shared_ptr<A, Allocator> a)
    : a(std::move(a)) {}
 
+  template<class A2>
+  CUDA LowerBound(const LowerBound<A2, appx>& other, AbstractDeps<Allocator>& deps)
+   : a(deps.clone(other.a)) {}
+
   /** Create two formulas of the form `x = lb \/ x > lb`.
    *  We suppose that `a` is able to interpret those constraints. */
   CUDA BranchType split(AVar x) const {
