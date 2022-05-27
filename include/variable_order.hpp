@@ -28,7 +28,7 @@ public:
     const auto& env = a->environment();
     vars.reserve(env.size());
     for(int i = 0; i < env.size(); ++i) {
-      vars.push_back(make_var(a->uid(), i));
+      vars.push_back(*(env.to_avar(env[i])));
     }
   }
 

@@ -168,7 +168,7 @@ private:
    * If we are on the root node, we save a snapshot of root before committing to the left node. */
   CUDA void commit_left(BInc& has_changed) {
     assert(bool(a));
-    a->tell(stack.back().next(), has_changed);
+    a->tell(TellType(stack.back().next()), has_changed);
   }
 
   /** We explore the next node of the search tree available (after we backtracked, so it cannot be a left node). */
@@ -211,8 +211,7 @@ private:
   CUDA void replay(BInc& has_changed) {
     for(int i = 0; i < stack.size(); ++i) {
       assert(i < stack.size());
-      auto t = stack[i].current();
-      a->tell(t, has_changed);
+      a->tell(TellType(stack[i].current()), has_changed);
     }
   }
 };

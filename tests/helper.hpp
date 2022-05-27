@@ -16,6 +16,8 @@
 #include "split.hpp"
 #include "vector.hpp"
 #include "shared_ptr.hpp"
+#include "ipc.hpp"
+#include "terms.hpp"
 
 using namespace lala;
 using namespace battery;
@@ -23,6 +25,9 @@ using namespace battery;
 using F = TFormula<StandardAllocator>;
 
 static LVar<StandardAllocator> var_x = "x";
+static LVar<StandardAllocator> var_x0 = "x0";
+static LVar<StandardAllocator> var_x1 = "x1";
+static LVar<StandardAllocator> var_x2 = "x2";
 static LVar<StandardAllocator> var_y = "y";
 static LVar<StandardAllocator> var_z = "z";
 static LVar<StandardAllocator> var_b = "b";
@@ -35,11 +40,13 @@ using zi = ZInc<int>;
 using zd = ZDec<int>;
 using Itv = Interval<zi>;
 using IStore = VStore<Itv, StandardAllocator>;
+using IIPC = IPC<IStore>;
 
 const AType sty = 0;
-const AType tty = 1;
-const AType split_ty = 2;
-const AType bab_ty = 3;
+const AType pty = 1;
+const AType tty = 2;
+const AType split_ty = 3;
+const AType bab_ty = 4;
 
 template <typename U, typename F>
 void tell_store(VStore<U, StandardAllocator>& store, F f, const LVar<StandardAllocator>& x, U v) {
@@ -63,6 +70,12 @@ void populate_istore_n_vars(IStore& store, int n, int l, int u) {
 }
 void populate_istore_10_vars(IStore& store, int l, int u) {
   populate_istore_n_vars(store, 10, l, u);
+}
+
+void x0_plus_x1_eq_x2(IIPC& ipc) {
+  auto f = F::make_binary(F::make_binary(F::make_lvar(sty, var_x0), ADD, F::make_lvar(sty, var_x1), pty), EQ, F::make_lvar(sty, var_x2), pty);
+  BInc has_changed = BInc::bot();
+  ipc.tell(*(ipc.interpret(f)), has_changed);
 }
 
 template <class A>
