@@ -21,6 +21,7 @@ public:
   using APtr = battery::shared_ptr<A, Allocator>;
   using SplitPtr = battery::shared_ptr<Split, Allocator>;
   using this_type = SearchTree<A, Split>;
+  using Env = typename A::Env;
 
 private:
   AType uid_;
@@ -49,6 +50,10 @@ public:
     return uid_;
   }
 
+  CUDA Allocator get_allocator() const {
+    return a->get_allocator();
+  }
+
   CUDA BDec is_singleton() const {
     return stack.empty() && bool(a);
   }
@@ -64,12 +69,10 @@ public:
 
   template <class F>
   CUDA thrust::optional<TellType> interpret(const F& f) {
-    if(is_top()) {
+    if(is_top().guard()) {
       return {};  // We could actually interpret `f` as `false` instead.
     }
-    else {
-      return a->interpret(f);
-    }
+    return a->interpret(f);
   }
 
   CUDA this_type& tell(TellType&& t, BInc& has_changed) {
@@ -131,6 +134,10 @@ public:
         // return u;
       }
     }
+  }
+
+  CUDA const Env& environment() const {
+    return a->environment();
   }
 
 private:

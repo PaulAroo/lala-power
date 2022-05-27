@@ -74,7 +74,7 @@ public:
   }
 
   CUDA void refine(int i, BInc& has_changed) {
-    if(i < this->vars.size()) {
+    if(i < this->vars.size() && !this->a->is_top().guard()) {
       using D = A::Universe;
       const D& x = this->a->project(this->vars[i]);
       // This condition is actually monotone under the assumption that x is not updated anymore between two invocations of this refine function.
