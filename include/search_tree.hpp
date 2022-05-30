@@ -77,8 +77,10 @@ public:
 
   CUDA this_type& tell(TellType&& t, BInc& has_changed) {
     if(!is_top().guard()) {
-      // We will add `t` to root when we backtrack (see pop) and have a chance to modify the root node.
-      root_formulas.push_back(t);
+      if(lnot(is_singleton()).guard()) {
+        // We will add `t` to root when we backtrack (see pop) and have a chance to modify the root node.
+        root_formulas.push_back(t);
+      }
       // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
       a->tell(std::move(t), has_changed);
       has_changed.tell(BInc::top());

@@ -49,8 +49,12 @@ public:
     var_order.reset();
   }
 
+  CUDA thrust::optional<AVar> project() const {
+    return var_order.project();
+  }
+
   CUDA BranchType split() {
-    auto x = var_order.project();
+    auto x = project();
     if(x.has_value()) {
       return val_order.split(*x);
     }
