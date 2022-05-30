@@ -95,7 +95,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
     }
     search_tree.refine(has_changed);
   }
-  printf("iterations: %d\n", iterations);
+  EXPECT_EQ(iterations, 12);
   EXPECT_TRUE2(search_tree.is_top());
   EXPECT_FALSE2(search_tree.is_bot());
   has_changed = BInc::bot();
