@@ -143,6 +143,7 @@ public:
   }
 
   CUDA const Env& environment() const {
+    assert(bool(a));
     return a->environment();
   }
 

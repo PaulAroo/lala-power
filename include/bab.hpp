@@ -134,7 +134,12 @@ public:
   }
 
   CUDA const Env& environment() const {
-    return a->environment();
+    if(!a->is_top().guard()) {
+      return a->environment();
+    }
+    else {
+      return best->environment();
+    }
   }
 };
 
