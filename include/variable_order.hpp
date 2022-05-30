@@ -43,10 +43,14 @@ public:
   template<class A2>
   CUDA VariableOrder(const VariableOrder<A2>& other, AbstractDeps<Allocator>& deps)
    : vars(other.vars), a(deps.clone(other.a)) {}
+
+  CUDA BInc is_top() const {
+    return a->is_top();
+  }
 };
 
 template <class A>
-class InputOrder : VariableOrder<A> {
+class InputOrder : public VariableOrder<A> {
 public:
   using Allocator = typename A::Allocator;
   using LVarArray = VariableOrder<A>::LVarArray;
@@ -74,7 +78,7 @@ public:
   }
 
   CUDA void refine(int i, BInc& has_changed) {
-    if(i < this->vars.size() && !this->a->is_top().guard()) {
+    if(i < this->vars.size() && !this->is_top().guard()) {
       using D = A::Universe;
       const D& x = this->a->project(this->vars[i]);
       // This condition is actually monotone under the assumption that x is not updated anymore between two invocations of this refine function.

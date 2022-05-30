@@ -33,6 +33,10 @@ public:
     return uid_;
   }
 
+  CUDA BInc is_top() const {
+    return var_order.is_top();
+  }
+
   CUDA int num_refinements() const {
     return var_order.num_refinements();
   }

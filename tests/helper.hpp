@@ -18,6 +18,7 @@
 #include "shared_ptr.hpp"
 #include "ipc.hpp"
 #include "terms.hpp"
+#include "fixpoint.hpp"
 
 using namespace lala;
 using namespace battery;
@@ -76,13 +77,6 @@ void x0_plus_x1_eq_x2(IIPC& ipc) {
   auto f = F::make_binary(F::make_binary(F::make_lvar(sty, var_x0), ADD, F::make_lvar(sty, var_x1), pty), EQ, F::make_lvar(sty, var_x2), pty);
   BInc has_changed = BInc::bot();
   ipc.tell(*(ipc.interpret(f)), has_changed);
-}
-
-template <class A>
-void seq_refine(A& a, BInc& has_changed) {
-  for(int i = 0; i < a.num_refinements(); ++i) {
-    a.refine(i, has_changed);
-  }
 }
 
 template <class A>
