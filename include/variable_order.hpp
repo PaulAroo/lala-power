@@ -24,25 +24,22 @@ protected:
 
 public:
   CUDA VariableOrder(VariableOrder&&) = default;
-  CUDA VariableOrder(battery::shared_ptr<A, Allocator> a) : a(a) {
-    const auto& env = a->environment();
-    vars.reserve(env.size());
-    for(int i = 0; i < env.size(); ++i) {
-      vars.push_back(*(env.to_avar(env[i])));
-    }
-  }
-
-  CUDA VariableOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars) : a(a) {
-    const auto& env = a->environment();
-    vars.reserve(lvars.size());
-    for(int i = 0; i < lvars.size(); ++i) {
-      vars.push_back(*(env.to_avar(lvars[i])));
-    }
-  }
+  CUDA VariableOrder(battery::shared_ptr<A, Allocator> a) : a(a) {}
 
   template<class A2>
   CUDA VariableOrder(const VariableOrder<A2>& other, AbstractDeps<Allocator>& deps)
    : vars(other.vars), a(deps.clone(other.a)) {}
+
+  CUDA void interpret() {
+    const auto& env = a->environment();
+    if(vars.size() != env.size()) {
+      vars.clear();
+      vars.reserve(env.size());
+      for(int i = 0; i < env.size(); ++i) {
+        vars.push_back(*(env.to_avar(env[i])));
+      }
+    }
+  }
 
   CUDA BInc is_top() const {
     return a->is_top();

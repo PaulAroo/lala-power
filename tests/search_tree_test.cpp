@@ -15,9 +15,13 @@ void check_solution(A& a, vector<int> solution) {
 
 TEST(SearchTreeTest, EnumerationSolution) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_n_vars(*store, 3, 0, 2);
   auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
   auto search_tree = ST(tty, store, split);
+  EXPECT_TRUE2(search_tree.is_bot());
+  EXPECT_FALSE2(search_tree.is_top());
+
+  populate_n_vars(search_tree, 3, 0, 2);
+
   EXPECT_FALSE2(search_tree.is_bot());
   EXPECT_FALSE2(search_tree.is_top());
 
@@ -63,11 +67,15 @@ using IST = SearchTree<IIPC, ISplitInputLB>;
 
 TEST(SearchTreeTest, ConstrainedEnumeration) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_n_vars(*store, 3, 0, 2);
   auto ipc = make_shared<IIPC, StandardAllocator>(IIPC(pty, store));
-  x0_plus_x1_eq_x2(*ipc);
   auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
   auto search_tree = IST(tty, ipc, split);
+  EXPECT_TRUE2(search_tree.is_bot());
+  EXPECT_FALSE2(search_tree.is_top());
+
+  populate_n_vars(search_tree, 3, 0, 2);
+  x0_plus_x1_eq_x2(*ipc);
+
   EXPECT_FALSE2(search_tree.is_bot());
   EXPECT_FALSE2(search_tree.is_top());
 

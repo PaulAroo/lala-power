@@ -19,10 +19,12 @@ using SF = SFormula<StandardAllocator>;
 
 void test_unconstrained_bab(SF::Mode mode) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_n_vars(*store, 3, 0, 2);
   auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
   auto search_tree = make_shared<ST, StandardAllocator>(tty, store, split);
   auto bab = BAB_(bab_ty, search_tree);
+
+  // Interpret formula
+  populate_n_vars(*search_tree, 3, 0, 2);
 
   // Find solution optimizing x1.
   auto opt_x1 = bab.interpret(SF(F::make_true(), mode, "x1"));
@@ -58,8 +60,8 @@ void test_unconstrained_bab(SF::Mode mode) {
 }
 
 TEST(BABTest, UnconstrainedOptimization) {
-  // test_unconstrained_bab(SF::Mode::MINIMIZE);
-  // test_unconstrained_bab(SF::Mode::MAXIMIZE);
+  test_unconstrained_bab(SF::Mode::MINIMIZE);
+  test_unconstrained_bab(SF::Mode::MAXIMIZE);
 }
 
 using ISplitInputLB = Split<IIPC, InputOrder<IIPC>, LowerBound<IIPC>>;
@@ -68,12 +70,14 @@ using IBAB = BAB<IST>;
 
 void test_constrained_bab(SF::Mode mode) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_n_vars(*store, 3, 0, 2);
   auto ipc = make_shared<IIPC, StandardAllocator>(IIPC(pty, store));
-  x0_plus_x1_eq_x2(*ipc);
   auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
   auto search_tree = make_shared<IST, StandardAllocator>(tty, ipc, split);
   auto bab = IBAB(bab_ty, search_tree);
+
+  // Interpret formula
+  populate_n_vars(*search_tree, 3, 0, 2);
+  x0_plus_x1_eq_x2(*ipc);
 
   // Find solution optimizing x2.
   auto opt_x2 = bab.interpret(SF(F::make_true(), mode, "x2"));

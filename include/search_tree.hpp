@@ -72,7 +72,11 @@ public:
     if(is_top().guard()) {
       return {};  // We could actually interpret `f` as `false` instead.
     }
-    return a->interpret(f);
+    auto r = a->interpret(f);
+    if(r.has_value()) {
+      split->interpret();
+    }
+    return std::move(r);
   }
 
   CUDA this_type& tell(TellType&& t, BInc& has_changed) {

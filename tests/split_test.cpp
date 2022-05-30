@@ -16,8 +16,9 @@ void fix_all_and_test(IStore& store, A& a) {
 
 TEST(BranchTest, InputOrderTest) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_10_vars(*store, 0, 10);
+  populate_10_vars(*store, 0, 10);
   InputOrder<IStore> input_order(store);
+  input_order.interpret();
   EXPECT_FALSE(input_order.project().has_value());
   seq_refine_check(input_order);
   EXPECT_TRUE(input_order.project().has_value());
@@ -76,7 +77,7 @@ void split_and_test(IStore& store, A& a, AVar x, Itv expect_left, Itv expect_rig
 
 TEST(BranchTest, LowerBoundTest) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  populate_istore_10_vars(*store, 0, 10);
+  populate_10_vars(*store, 0, 10);
   LowerBound<IStore> lb(store);
   split_and_test(*store, lb, make_var(sty, 0), Itv(0,0), Itv(1,10));
 }

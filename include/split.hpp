@@ -37,6 +37,11 @@ public:
     return var_order.is_top();
   }
 
+  /** Later on, we might pass to interpret a splitting strategy. */
+  CUDA void interpret() {
+    var_order.interpret();
+  }
+
   CUDA int num_refinements() const {
     return var_order.num_refinements();
   }
