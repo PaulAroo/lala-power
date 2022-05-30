@@ -43,7 +43,7 @@ public:
   template<class Alloc2>
   CUDA SearchTree(const SearchTree<A, Alloc2>& other, AbstractDeps<Allocator>& deps)
    : uid_(other.uid_), a(deps.clone(other.a)), split(deps.clone(other.split)),
-     stack(stack), root(other.root), root_formulas(other.root_formulas)
+     stack(other.stack), root(other.root), root_formulas(other.root_formulas)
   {}
 
   CUDA AType uid() const {
