@@ -102,6 +102,10 @@ public:
     }
   }
 
+  CUDA ZPInc<int> solutions_count() const {
+    return solutions_found;
+  }
+
   /** An under-approximation is reached when the underlying abstract element `a` is equal to `top`.
    * We consider that `top` implies we have completely explored `a`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.

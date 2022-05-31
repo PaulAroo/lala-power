@@ -142,6 +142,11 @@ public:
     }
   }
 
+  /** \return the current depth of the search tree. The root node has a depth of 0. */
+  CUDA size_t depth() const {
+    return stack.size();
+  }
+
   CUDA const Env& environment() const {
     assert(bool(a));
     return a->environment();
@@ -217,7 +222,6 @@ private:
   /** Goes from `root` to the new node to be explored. */
   CUDA void replay(BInc& has_changed) {
     for(int i = 0; i < stack.size(); ++i) {
-      assert(i < stack.size());
       a->tell(TellType(stack[i].current()), has_changed);
     }
   }
