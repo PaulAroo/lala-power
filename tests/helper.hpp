@@ -85,7 +85,7 @@ void x0_plus_x1_eq_x2(IIPC& ipc) {
 template <class A>
 void seq_refine_check(A& a, BInc expect_changed = BInc::top()) {
   BInc has_changed = BInc::bot();
-  seq_refine(a, has_changed);
+  GaussSeidelIteration::iterate(a, has_changed);
   EXPECT_EQ2(has_changed, expect_changed);
 }
 

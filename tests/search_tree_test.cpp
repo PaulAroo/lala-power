@@ -37,7 +37,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
         while(!leaf) {
           BInc has_changed = BInc::bot();
           split->reset();
-          seq_refine(*split, has_changed);
+          GaussSeidelIteration::iterate(*split, has_changed);
           // There is no constraint so we are always navigating the under-approximated space.
           EXPECT_TRUE(search_tree.extract(sol));
           // All variables are supposed to be assigned if nothing changed.
@@ -95,9 +95,9 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   while(has_changed.guard()) {
     ++iterations;
     has_changed = BInc::bot();
-    seq_refine(*ipc, has_changed);
+    GaussSeidelIteration::fixpoint(*ipc, has_changed);
     split->reset();
-    seq_refine(*split, has_changed);
+    GaussSeidelIteration::iterate(*split, has_changed);
     if(search_tree.extract(sol)) {
       check_solution(sol, sols[solutions++]);
     }
@@ -107,7 +107,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   EXPECT_TRUE2(search_tree.is_top());
   EXPECT_FALSE2(search_tree.is_bot());
   has_changed = BInc::bot();
-  seq_refine(*ipc, has_changed);
+  GaussSeidelIteration::fixpoint(*ipc, has_changed);
   search_tree.refine(has_changed);
   EXPECT_FALSE2(has_changed);
   EXPECT_TRUE2(search_tree.is_top());

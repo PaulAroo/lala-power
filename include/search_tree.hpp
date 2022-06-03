@@ -30,7 +30,7 @@ private:
   APtr a;
   SplitPtr split;
   battery::vector<BranchType, Allocator> stack;
-  A::Snapshot root;
+  typename A::Snapshot root;
   // Formulas to be added to root on backtracking.
   battery::vector<TellType, Allocator> root_formulas;
 

@@ -20,8 +20,8 @@ private:
 
 public:
   CUDA Branch(): children(), current_idx(-1) {}
-  CUDA Branch(const Branch&) = default;
-  CUDA Branch(Branch&&) = default;
+  Branch(const Branch&) = default;
+  Branch(Branch&&) = default;
   CUDA Branch(battery::vector<TellType, Allocator>&& children)
    : children(std::move(children)), current_idx(-1) {}
 

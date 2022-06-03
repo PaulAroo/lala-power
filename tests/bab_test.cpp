@@ -40,7 +40,7 @@ void test_unconstrained_bab(SF::Mode mode) {
     split->reset();
     // Compute \f$ pop \circ push \circ split \circ bab \f$.
     bab.refine(has_changed);
-    seq_refine(*split, has_changed);
+    GaussSeidelIteration::iterate(*split, has_changed);
     search_tree->refine(has_changed);
   }
   // Find the optimum in the root node since they are no constraint...
@@ -54,7 +54,7 @@ void test_unconstrained_bab(SF::Mode mode) {
   has_changed = BInc::bot();
   split->reset();
   bab.refine(has_changed);
-  seq_refine(*split, has_changed);
+  GaussSeidelIteration::iterate(*split, has_changed);
   search_tree->refine(has_changed);
   EXPECT_FALSE2(has_changed);
 }
@@ -91,10 +91,10 @@ void test_constrained_bab(SF::Mode mode) {
     iterations++;
     has_changed = BInc::bot();
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
-    seq_refine(*ipc, has_changed);
+    GaussSeidelIteration::fixpoint(*ipc, has_changed);
     bab.refine(has_changed);
     split->reset();
-    seq_refine(*split, has_changed);
+    GaussSeidelIteration::iterate(*split, has_changed);
     search_tree->refine(has_changed);
   }
   EXPECT_TRUE2(bab.is_top());
@@ -111,10 +111,10 @@ void test_constrained_bab(SF::Mode mode) {
 
   // One more iteration to check idempotency.
   has_changed = BInc::bot();
-  seq_refine(*ipc, has_changed);
+  GaussSeidelIteration::fixpoint(*ipc, has_changed);
   bab.refine(has_changed);
   split->reset();
-  seq_refine(*split, has_changed);
+  GaussSeidelIteration::iterate(*split, has_changed);
   search_tree->refine(has_changed);
   EXPECT_FALSE2(has_changed);
 }

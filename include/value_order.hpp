@@ -22,7 +22,7 @@ private:
   battery::shared_ptr<A, Allocator> a;
 
 public:
-  CUDA LowerBound(LowerBound&&) = default;
+  LowerBound(LowerBound&&) = default;
   CUDA LowerBound(battery::shared_ptr<A, Allocator> a)
    : a(std::move(a)) {}
 

@@ -23,7 +23,7 @@ protected:
   battery::shared_ptr<A, Allocator> a;
 
 public:
-  CUDA VariableOrder(VariableOrder&&) = default;
+  VariableOrder(VariableOrder&&) = default;
   CUDA VariableOrder(battery::shared_ptr<A, Allocator> a) : a(a) {}
 
   template<class A2>
@@ -50,13 +50,13 @@ template <class A>
 class InputOrder : public VariableOrder<A> {
 public:
   using Allocator = typename A::Allocator;
-  using LVarArray = VariableOrder<A>::LVarArray;
+  using LVarArray = typename VariableOrder<A>::LVarArray;
 
 private:
   ZDec<int> smallest;
 
 public:
-  CUDA InputOrder(InputOrder&&) = default;
+  InputOrder(InputOrder&&) = default;
   CUDA InputOrder(battery::shared_ptr<A, Allocator> a)
    : VariableOrder<A>(std::move(a)), smallest(ZDec<int>::bot()) {}
   CUDA InputOrder(battery::shared_ptr<A, Allocator> a, const LVarArray& lvars)
@@ -76,7 +76,7 @@ public:
 
   CUDA void refine(int i, BInc& has_changed) {
     if(i < this->vars.size() && !this->is_top().guard()) {
-      using D = A::Universe;
+      using D = typename A::Universe;
       const D& x = this->a->project(this->vars[i]);
       // This condition is actually monotone under the assumption that x is not updated anymore between two invocations of this refine function.
       if(lt<typename D::LB>(x.lb(), x.ub()).value()) {
