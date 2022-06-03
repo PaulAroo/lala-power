@@ -63,7 +63,7 @@ public:
     AVar x;
     bool optimization_mode;
     typename A::TellType a_tell;
-    TellType(AVar x, bool opt, typename A::TellType&& t)
+    CUDA TellType(AVar x, bool opt, typename A::TellType&& t)
      : x(x), optimization_mode(opt), a_tell(std::move(t)) {}
   };
 
