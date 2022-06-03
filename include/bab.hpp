@@ -137,6 +137,10 @@ public:
     return !optimization_mode;
   }
 
+  CUDA AVar objective_var() const {
+    return x;
+  }
+
   CUDA const Env& environment() const {
     if(!a->is_top().guard()) {
       return a->environment();
