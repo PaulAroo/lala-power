@@ -17,7 +17,7 @@ void check_solution(A& a, vector<Itv> solution) {
 
 using SF = SFormula<StandardAllocator>;
 
-void test_unconstrained_bab(SF::Mode mode) {
+void test_unconstrained_bab(Mode mode) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
   auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
   auto search_tree = make_shared<ST, StandardAllocator>(tty, store, split);
@@ -60,15 +60,15 @@ void test_unconstrained_bab(SF::Mode mode) {
 }
 
 TEST(BABTest, UnconstrainedOptimization) {
-  test_unconstrained_bab(SF::Mode::MINIMIZE);
-  test_unconstrained_bab(SF::Mode::MAXIMIZE);
+  test_unconstrained_bab(MINIMIZE);
+  test_unconstrained_bab(MAXIMIZE);
 }
 
 using ISplitInputLB = Split<IIPC, InputOrder<IIPC>, LowerBound<IIPC>>;
 using IST = SearchTree<IIPC, ISplitInputLB>;
 using IBAB = BAB<IST>;
 
-void test_constrained_bab(SF::Mode mode) {
+void test_constrained_bab(Mode mode) {
   auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
   auto ipc = make_shared<IIPC, StandardAllocator>(IIPC(pty, store));
   auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
@@ -98,7 +98,7 @@ void test_constrained_bab(SF::Mode mode) {
     search_tree->refine(has_changed);
   }
   EXPECT_TRUE2(bab.is_top());
-  if(mode == SF::MINIMIZE) {
+  if(mode == MINIMIZE) {
     check_solution(bab.optimum(), {Itv(0,0),Itv(0,0),Itv(0,0)});
     EXPECT_EQ(iterations, 5);
   }
@@ -120,6 +120,6 @@ void test_constrained_bab(SF::Mode mode) {
 }
 
 TEST(BABTest, ConstrainedOptimization) {
-  test_constrained_bab(SF::MINIMIZE);
-  test_constrained_bab(SF::MAXIMIZE);
+  test_constrained_bab(MINIMIZE);
+  test_constrained_bab(MAXIMIZE);
 }

@@ -69,12 +69,12 @@ public:
 
   template <class F>
   CUDA thrust::optional<TellType> interpret(const F& f) {
-    if(f.mode() != F::SATISFY) {
+    if(f.mode() != SATISFY) {
       auto a_tell = a->interpret(f.formula());
       if(a_tell.has_value()) {
         auto x = a->environment().to_avar(f.optimization_lvar());
         if(x.has_value()) {
-          return TellType(*x, f.mode() == F::MINIMIZE, std::move(*a_tell));
+          return TellType(*x, f.mode() == MINIMIZE, std::move(*a_tell));
         }
       }
     }
