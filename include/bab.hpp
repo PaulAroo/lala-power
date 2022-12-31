@@ -3,9 +3,9 @@
 #ifndef BAB_HPP
 #define BAB_HPP
 
-#include "ast.hpp"
-#include "z.hpp"
-#include "arithmetic.hpp"
+#include "logic/logic.hpp"
+#include "universes/upset_universe.hpp"
+#include "copy_dag_helper.hpp"
 #include "vector.hpp"
 #include "shared_ptr.hpp"
 
@@ -14,109 +14,172 @@ namespace lala {
 template <class A>
 class BAB {
 public:
-  using Allocator = typename A::Allocator;
-  using APtr = battery::shared_ptr<A, Allocator>;
+  using allocator_type = typename A::allocator_type;
+  using sub_type = A;
+  using sub_ptr = battery::shared_ptr<A, allocator_type>;
   using this_type = BAB<A>;
-  using Env = typename A::Env;
+
+  template <class Alloc2>
+  struct tell_type {
+    using sub_tell_type = typename sub_type::tell_type<Alloc2>;
+    AVar x;
+    bool optimization_mode;
+    battery::vector<sub_tell_type, Alloc2> sub_tells;
+    CUDA tell_type() = default;
+    CUDA tell_type(tell_type&&) = default;
+    CUDA tell_type(const tell_type&) = default;
+    CUDA tell_type(AVar x, bool opt): x(x), optimization_mode(opt) {}
+  };
+
+  template<class F, class Env>
+  using iresult = IResult<tell_type<typename Env::allocator_type>, F>;
+
+  constexpr static const char* name = "BAB";
 
 private:
-  AType uid_;
-  APtr a;
-  APtr best;
+  AType atype;
+  sub_ptr sub;
+  sub_ptr best;
   AVar x;
   bool optimization_mode; // `true` for minimization, `false` for maximization.
-  ZPInc<int> solutions_found;
+  int solutions_found;
 
 public:
-  CUDA BAB(AType uid, APtr a)
-   : uid_(uid), a(std::move(a)), x(-1),
+  CUDA BAB(AType atype, sub_ptr sub)
+   : atype(atype), sub(std::move(sub)), x(),
      solutions_found(0),
-     best(AbstractDeps<Allocator>(this->a->get_allocator()).clone(this->a))
+     best(AbstractDeps<allocator_type>(this->sub->get_allocator()).clone(this->sub))
   {
-    assert(this->a);
+    assert(this->sub);
     assert(this->best);
   }
 
   template<class A2>
-  CUDA BAB(const BAB<A2>& other, AbstractDeps<Allocator>& deps)
-   : uid_(other.uid_), a(deps.clone(other.a)),
+  CUDA BAB(const BAB<A2>& other, AbstractDeps<allocator_type>& deps)
+   : atype(other.atype), sub(deps.clone(other.sub)),
      best(deps.clone(other.best)), x(other.x), optimization_mode(other.optimization_mode)
   {}
 
-  CUDA AType uid() const {
-    return uid_;
+  CUDA AType aty() const {
+    return atype;
   }
 
-  CUDA Allocator get_allocator() const {
-    return a->get_allocator();
+  CUDA allocator_type get_allocator() const {
+    return sub->get_allocator();
   }
 
-  CUDA BInc is_top() const {
-    return a->is_top();
+  CUDA local::BInc is_top() const {
+    return sub->is_top();
   }
 
-  CUDA BDec is_bot() const {
-    return x == -1 && a->is_bot().value();
+  CUDA local::BDec is_bot() const {
+    return x.is_untyped() && sub->is_bot();
   }
 
-  struct TellType {
-    AVar x;
-    bool optimization_mode;
-    typename A::TellType a_tell;
-    CUDA TellType(AVar x, bool opt, typename A::TellType&& t)
-     : x(x), optimization_mode(opt), a_tell(std::move(t)) {}
-  };
+private:
+  template <class F, class Env>
+  CUDA void interpret_sub(iresult<F, Env>& res, const F& f, Env& env) {
+    auto sub_res = sub->interpret_in(f, env);
+    if(sub_res.has_value()) {
+      res.value().sub_tells.push_back(std::move(sub_res.value()));
+      res.join_warnings(std::move(sub_res));
+    }
+    else {
+      res.join_errors(std::move(sub_res));
+    }
+  }
 
-  template <class F>
-  CUDA thrust::optional<TellType> interpret(const F& f) {
-    if(f.mode() != SATISFY) {
-      auto a_tell = a->interpret(f.formula());
-      if(a_tell.has_value()) {
-        auto x = a->environment().to_avar(f.optimization_lvar());
-        if(x.has_value()) {
-          return TellType(*x, f.mode() == MINIMIZE, std::move(*a_tell));
+  template <class F, class Env>
+  CUDA void interpret_optimization_predicate(iresult<F, Env>& res, const F& f, Env& env) {
+    if(f.is_untyped() || f.type() == aty()) {
+      if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
+        res.value().optimization_mode = f.sig() == MINIMIZE;
+        if(f.seq(0).is_variable()) {
+          auto var_res = env.interpret(f.seq(0));
+          if(var_res.has_value()) {
+            res.value().x = var_res.value();
+          }
+          else {
+            res.join_errors(std::move(var_res));
+          }
+        }
+        else {
+          res = iresult<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize (how to solve this issue? You can create a new variable with the expression to optimize.", f));
+        }
+        return;
+      }
+      else if(f.type() == aty()) {
+        res = iresult<F, Env>(IError<F>(true, name, "Unsupported formula.", f));
+        return;
+      }
+    }
+    interpret_sub(res, f, env);
+  }
+
+public:
+  template <class F, class Env>
+  CUDA iresult<F, Env> interpret_in(const F& f, Env& env) {
+    iresult<F, Env> res(tell_type<typename Env::allocator_type>{});
+    if(f.is_untyped() || f.type() == aty()) {
+      if(f.is(F::Seq)) {
+        if(f.sig() == AND) {
+          for(int i = 0; i < f.seq().size() && res.has_value(); ++i) {
+            interpret_optimization_predicate(res, f.seq(i), env);
+          }
+        }
+        else {
+          interpret_optimization_predicate(res, f, env);
         }
       }
     }
-    return {};
+    else {
+      interpret_sub(res, f, env);
+    }
+    return std::move(res);
   }
 
-  CUDA this_type& tell(TellType&& t, BInc& has_changed) {
-    assert(x == -1); // multi-objective optimization not yet supported.
-    a->tell(std::move(t.a_tell), has_changed);
-    x = t.x;
-    optimization_mode = t.optimization_mode;
+  template <class Alloc, class Mem>
+  CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
+    for(int i = 0; i < t.sub_tells.size(); ++i) {
+      sub->tell(t.sub_tells[i], has_changed);
+    }
+    if(!t.x.is_untyped()) {
+      assert(x.is_untyped()); // multi-objective optimization not yet supported.
+      x = t.x;
+      optimization_mode = t.optimization_mode;
+      has_changed.tell_top();
+    }
     return *this;
   }
 
-  CUDA void refine(BInc& has_changed) {
-    if(x != -1 && a->extract(*best)) {
-      solutions_found.tell(add(solutions_found, spos(1)));
+  template <class Env, class Mem>
+  CUDA void refine(Env& env, BInc<Mem>& has_changed) {
+    if(!x.is_untyped() && sub->extract(*best)) {
+      solutions_found++;
       Sig optimize_sig = is_minimization() ? LT : GT;
       auto k = is_minimization()
-        ? best->project(x).lb().value()
-        : best->project(x).ub().value();
-      using F = TFormula<Allocator>;
-      auto t = *(a->interpret(F::make_binary(F::make_avar(x), optimize_sig, F::make_z(k), UNTYPED, EXACT, get_allocator())));
-      a->tell(std::move(t), has_changed);
+        ? best->project(x).lb()
+        : best->project(x).ub();
+      using F = TFormula<allocator_type>;
+      auto t = sub->interpret_in(F::make_binary(F::make_avar(x), optimize_sig, F::make_z(k), UNTYPED, EXACT, get_allocator()), env).value();
+      sub->tell(t, has_changed);
     }
   }
 
-  CUDA ZPInc<int> solutions_count() const {
+  CUDA int solutions_count() const {
     return solutions_found;
   }
 
-  /** An under-approximation is reached when the underlying abstract element `a` is equal to `top`.
-   * We consider that `top` implies we have completely explored `a`, and we can't find better bounds.
+  /** An under-approximation is reached when the underlying abstract element `sub` is equal to `top`.
+   * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
    * It is safe to use `this.extract(*this)` to avoid allocating memory. */
   CUDA bool extract(BAB<A>& ua) const {
-    if(land(gt<ZPInc<int>>(solutions_found, 0),
-            a->is_top()).guard())
+    if(solutions_found > 0 && sub->is_top())
     {
-      ua.solutions_found = ZPInc<int>(solutions_found);
+      ua.solutions_found = solutions_found;
       ua.best = best;
-      ua.a = a;
+      ua.sub = sub;
       ua.x = x;
       ua.optimization_mode = optimization_mode;
       return true;
@@ -139,15 +202,6 @@ public:
 
   CUDA AVar objective_var() const {
     return x;
-  }
-
-  CUDA const Env& environment() const {
-    if(!a->is_top().guard()) {
-      return a->environment();
-    }
-    else {
-      return best->environment();
-    }
   }
 };
 

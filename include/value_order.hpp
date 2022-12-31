@@ -3,10 +3,10 @@
 #ifndef VALUE_ORDER_HPP
 #define VALUE_ORDER_HPP
 
-#include "ast.hpp"
+#include "branch.hpp"
+#include "logic/logic.hpp"
 #include "vector.hpp"
 #include "shared_ptr.hpp"
-#include "branch.hpp"
 
 namespace lala {
 
@@ -14,30 +14,32 @@ template <class A, Approx appx = EXACT>
 class LowerBound
 {
 public:
-  using Allocator = typename A::Allocator;
-  using TellType = typename A::TellType;
-  using BranchType = Branch<TellType, Allocator>;
+  using allocator_type = typename A::allocator_type;
+  template <class Alloc>
+  using tell_type = typename A::tell_type<Alloc>;
+  using branch_type = Branch<tell_type<allocator_type>, allocator_type>;
 
 private:
-  battery::shared_ptr<A, Allocator> a;
+  battery::shared_ptr<A, allocator_type> a;
 
 public:
   LowerBound(LowerBound&&) = default;
-  CUDA LowerBound(battery::shared_ptr<A, Allocator> a)
+  CUDA LowerBound(battery::shared_ptr<A, allocator_type> a)
    : a(std::move(a)) {}
 
-  template<class A2>
-  CUDA LowerBound(const LowerBound<A2, appx>& other, AbstractDeps<Allocator>& deps)
+  template<class A2, class Alloc3>
+  CUDA LowerBound(const LowerBound<A2, appx>& other, AbstractDeps<allocator_type, Alloc3>& deps)
    : a(deps.clone(other.a)) {}
 
   /** Create two formulas of the form `x = lb \/ x > lb`.
    *  We suppose that `a` is able to interpret those constraints. */
-  CUDA BranchType split(AVar x) const {
-    using F = TFormula<Allocator>;
-    auto lb = a->project(x).lb().value();
-    return Branch(battery::vector<TellType, Allocator>({
-        *(a->interpret(F::make_binary(F::make_avar(x), EQ, F::make_z(lb), UNTYPED, appx, a->get_allocator()))),
-        *(a->interpret(F::make_binary(F::make_avar(x), GT, F::make_z(lb), UNTYPED, appx, a->get_allocator())))
+  template <class Env>
+  CUDA branch_type split(AVar x, Env& env) const {
+    using F = TFormula<allocator_type>;
+    auto lb = a->project(x).lb();
+    return Branch(battery::vector<tell_type<allocator_type>, allocator_type>({
+        std::move(a->interpret_in(F::make_binary(F::make_avar(x), EQ, F::make_z(lb), UNTYPED, appx, a->get_allocator()), env).value()),
+        std::move(a->interpret_in(F::make_binary(F::make_avar(x), GT, F::make_z(lb), UNTYPED, appx, a->get_allocator()), env).value())
       },
       a->get_allocator()));
   }

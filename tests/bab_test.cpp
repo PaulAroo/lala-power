@@ -11,94 +11,98 @@ using BAB_ = BAB<ST>;
 template <class A>
 void check_solution(A& a, vector<Itv> solution) {
   for(int i = 0; i < solution.size(); ++i) {
-    EXPECT_EQ2(a.project(make_var(sty, i)), solution[i]);
+    EXPECT_EQ(a.project(AVar(sty, i)), solution[i]);
   }
 }
 
-using SF = SFormula<StandardAllocator>;
-
-void test_unconstrained_bab(Mode mode) {
-  auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
+// Minimize is true, maximize is false.
+void test_unconstrained_bab(bool mode) {
+  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
   auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
   auto search_tree = make_shared<ST, StandardAllocator>(tty, store, split);
   auto bab = BAB_(bab_ty, search_tree);
 
-  // Interpret formula
-  populate_n_vars(*search_tree, 3, 0, 2);
+  std::cout << "Try interpreted the constraint\n" << std::endl;
+  VarEnv<StandardAllocator> env;
+  interpret_and_tell(bab,
+    ("var int: x1; var int: x2; var int: x3;\
+    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
+    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
+    constraint int_ge(x3, 0); constraint int_le(x3, 2);\
+    solve " + std::string(mode ? "minimize" : "maximize") + " x2;").c_str(), env);
 
-  // Find solution optimizing x1.
-  auto opt_x1 = bab.interpret(SF(F::make_true(), mode, "x1"));
-  EXPECT_TRUE(opt_x1.has_value());
-  BInc has_changed = BInc::bot();
-  bab.tell(std::move(*opt_x1), has_changed);
-  EXPECT_TRUE2(has_changed);
+std::cout << "Successfully interpreted the constraint\n" << std::endl;
 
+  // Find solution optimizing x2.
   int iterations = 0;
-  while(!bab.extract(bab) && has_changed.guard()) {
+  local::BInc has_changed = true;
+  while(!bab.extract(bab) && has_changed) {
     iterations++;
-    has_changed = BInc::bot();
+    has_changed = false;
     split->reset();
     // Compute \f$ pop \circ push \circ split \circ bab \f$.
-    bab.refine(has_changed);
+    bab.refine(env, has_changed);
     GaussSeidelIteration::iterate(*split, has_changed);
-    search_tree->refine(has_changed);
+    search_tree->refine(env, has_changed);
   }
   // Find the optimum in the root node since they are no constraint...
   check_solution(bab.optimum(), {Itv(0,2),Itv(0,2),Itv(0,2)});
   // With a input-order smallest first strat, the fixed point is reached after 1 iteration.
   EXPECT_EQ(iterations, 1);
 
-  EXPECT_TRUE2(search_tree->is_top());
+  EXPECT_TRUE(search_tree->is_top());
 
   // One more iteration to check idempotency.
-  has_changed = BInc::bot();
+  has_changed = false;
   split->reset();
-  bab.refine(has_changed);
+  bab.refine(env, has_changed);
   GaussSeidelIteration::iterate(*split, has_changed);
-  search_tree->refine(has_changed);
-  EXPECT_FALSE2(has_changed);
+  search_tree->refine(env, has_changed);
+  EXPECT_FALSE(has_changed);
 }
 
 TEST(BABTest, UnconstrainedOptimization) {
-  test_unconstrained_bab(MINIMIZE);
-  test_unconstrained_bab(MAXIMIZE);
+  test_unconstrained_bab(true);
+  test_unconstrained_bab(false);
 }
 
-using ISplitInputLB = Split<IIPC, InputOrder<IIPC>, LowerBound<IIPC>>;
-using IST = SearchTree<IIPC, ISplitInputLB>;
+using ISplitInputLB = Split<IPC, InputOrder<IPC>, LowerBound<IPC>>;
+using IST = SearchTree<IPC, ISplitInputLB>;
 using IBAB = BAB<IST>;
 
-void test_constrained_bab(Mode mode) {
-  auto store = make_shared<IStore, StandardAllocator>(std::move(IStore::bot(sty)));
-  auto ipc = make_shared<IIPC, StandardAllocator>(IIPC(pty, store));
+// Minimize is true, maximize is false.
+void test_constrained_bab(bool mode) {
+  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
+  auto ipc = make_shared<IPC, StandardAllocator>(IPC(pty, store));
   auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
   auto search_tree = make_shared<IST, StandardAllocator>(tty, ipc, split);
   auto bab = IBAB(bab_ty, search_tree);
 
   // Interpret formula
-  populate_n_vars(*search_tree, 3, 0, 2);
-  x0_plus_x1_eq_x2(*ipc);
+  VarEnv<StandardAllocator> env;
+  interpret_and_tell(bab,
+    ("var int: x1; var int: x2; var int: x3;\
+    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
+    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
+    constraint int_ge(x3, 0); constraint int_le(x3, 2);\
+    constraint int_plus(x1, x2, x3);\
+    solve " + std::string(mode ? "minimize" : "maximize") + " x3;").c_str(), env);
 
-  // Find solution optimizing x2.
-  auto opt_x2 = bab.interpret(SF(F::make_true(), mode, "x2"));
-  EXPECT_TRUE(opt_x2.has_value());
-  BInc has_changed = BInc::bot();
-  bab.tell(std::move(*opt_x2), has_changed);
-  EXPECT_TRUE2(has_changed);
-
+  // Find solution optimizing x3.
+  local::BInc has_changed = true;
   int iterations = 0;
-  while(!bab.extract(bab) && has_changed.guard()) {
+  while(!bab.extract(bab) && has_changed) {
     iterations++;
-    has_changed = BInc::bot();
+    has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
     GaussSeidelIteration::fixpoint(*ipc, has_changed);
-    bab.refine(has_changed);
+    bab.refine(env, has_changed);
     split->reset();
     GaussSeidelIteration::iterate(*split, has_changed);
-    search_tree->refine(has_changed);
+    search_tree->refine(env, has_changed);
   }
-  EXPECT_TRUE2(bab.is_top());
-  if(mode == MINIMIZE) {
+  EXPECT_TRUE(bab.is_top());
+  if(mode) {
     check_solution(bab.optimum(), {Itv(0,0),Itv(0,0),Itv(0,0)});
     EXPECT_EQ(iterations, 5);
   }
@@ -107,19 +111,19 @@ void test_constrained_bab(Mode mode) {
     EXPECT_EQ(iterations, 7);
   }
 
-  EXPECT_TRUE2(search_tree->is_top());
+  EXPECT_TRUE(search_tree->is_top());
 
   // One more iteration to check idempotency.
-  has_changed = BInc::bot();
+  has_changed = false;
   GaussSeidelIteration::fixpoint(*ipc, has_changed);
-  bab.refine(has_changed);
+  bab.refine(env, has_changed);
   split->reset();
   GaussSeidelIteration::iterate(*split, has_changed);
-  search_tree->refine(has_changed);
-  EXPECT_FALSE2(has_changed);
+  search_tree->refine(env, has_changed);
+  EXPECT_FALSE(has_changed);
 }
 
 TEST(BABTest, ConstrainedOptimization) {
-  test_constrained_bab(MINIMIZE);
-  test_constrained_bab(MAXIMIZE);
+  test_constrained_bab(true);
+  test_constrained_bab(false);
 }

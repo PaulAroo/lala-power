@@ -3,7 +3,7 @@
 #ifndef BRANCH_HPP
 #define BRANCH_HPP
 
-#include "ast.hpp"
+#include "logic/logic.hpp"
 #include "vector.hpp"
 
 namespace lala {
@@ -11,25 +11,25 @@ namespace lala {
 template <class TellTy, class Alloc>
 class Branch {
 public:
-  using TellType = TellTy;
-  using Allocator = Alloc;
+  using tell_type = TellTy;
+  using allocator_type = Alloc;
 
 private:
-  battery::vector<TellType, Allocator> children;
+  battery::vector<tell_type, allocator_type> children;
   int current_idx;
 
 public:
   CUDA Branch(): children(), current_idx(-1) {}
   Branch(const Branch&) = default;
   Branch(Branch&&) = default;
-  CUDA Branch(battery::vector<TellType, Allocator>&& children)
+  CUDA Branch(battery::vector<tell_type, allocator_type>&& children)
    : children(std::move(children)), current_idx(-1) {}
 
   CUDA int size() const {
     return children.size();
   }
 
-  CUDA const TellType& next() {
+  CUDA const tell_type& next() {
     assert(has_next());
     return children[++current_idx];
   }
@@ -46,7 +46,7 @@ public:
     return current_idx >= size();
   }
 
-  CUDA const TellType& current() const {
+  CUDA const tell_type& current() const {
     assert(!is_pruned() && current_idx != -1 && current_idx < children.size());
     return children[current_idx];
   }

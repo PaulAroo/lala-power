@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 include(FetchContent)
 include(CMakePrintHelpers)
 
+# Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
+# Fix found at https://github.com/ethereum/solidity/pull/13429
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 project(lala-search LANGUAGES CUDA CXX)
 option(GPU "GPU" ON)
 option(LALASEARCH_BUILD_TESTS "LALASEARCH_BUILD_TESTS" OFF)
@@ -32,23 +38,30 @@ endif()
 FetchContent_Declare(
   cuda_battery
   GIT_REPOSITORY "https://github.com/lattice-land/cuda-battery.git"
-  GIT_TAG        main
+  GIT_TAG        develop
 )
 FetchContent_MakeAvailable(cuda_battery)
 
 FetchContent_Declare(
   lala_core
   GIT_REPOSITORY "https://github.com/lattice-land/lala-core.git"
-  GIT_TAG        main
+  GIT_TAG        develop
 )
 FetchContent_MakeAvailable(lala_core)
 
 FetchContent_Declare(
-  lala_ipc
-  GIT_REPOSITORY "https://github.com/lattice-land/lala-ipc.git"
-  GIT_TAG        main
+  lala_parsing
+  GIT_REPOSITORY "https://github.com/lattice-land/lala-parsing.git"
+  GIT_TAG        develop
 )
-FetchContent_MakeAvailable(lala_ipc)
+FetchContent_MakeAvailable(lala_parsing)
+
+FetchContent_Declare(
+  lala_pc
+  GIT_REPOSITORY "https://github.com/lattice-land/lala-pc.git"
+  GIT_TAG        develop
+)
+FetchContent_MakeAvailable(lala_pc)
 
 # Thrust dependency
 
@@ -96,18 +109,18 @@ enable_testing()
 include(GoogleTest)
 
 add_executable(split_test tests/split_test.cpp)
-target_link_libraries(split_test cuda_battery lala_core lala_ipc lala_search gtest_main)
-target_include_directories(split_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${thrust_SOURCE_DIR})
+target_link_libraries(split_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
+target_include_directories(split_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
 gtest_discover_tests(split_test)
 
 add_executable(search_tree_test tests/search_tree_test.cpp)
-target_link_libraries(search_tree_test cuda_battery lala_core lala_ipc lala_search gtest_main)
-target_include_directories(search_tree_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${thrust_SOURCE_DIR})
+target_link_libraries(search_tree_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
+target_include_directories(search_tree_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
 gtest_discover_tests(search_tree_test)
 
 add_executable(bab_test tests/bab_test.cpp)
-target_link_libraries(bab_test cuda_battery lala_core lala_ipc lala_search gtest_main)
-target_include_directories(bab_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${thrust_SOURCE_DIR})
+target_link_libraries(bab_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
+target_include_directories(bab_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
 gtest_discover_tests(bab_test)
 
 endif()
