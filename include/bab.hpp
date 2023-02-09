@@ -104,7 +104,7 @@ private:
           }
         }
         else {
-          res = iresult<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize (how to solve this issue? You can create a new variable with the expression to optimize.", f));
+          res = iresult<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize. Instead, you can create a new variable with the expression to optimize.", f));
         }
         return;
       }
@@ -152,9 +152,12 @@ public:
     return *this;
   }
 
+  /** \return `true` if the sub-domain is a solution (more precisely, an under-approximation) of the problem.
+      The extracted under-approximation can be retreived by `optimum()`. */
   template <class Env, class Mem>
-  CUDA void refine(Env& env, BInc<Mem>& has_changed) {
-    if(!x.is_untyped() && sub->extract(*best)) {
+  CUDA bool refine(Env& env, BInc<Mem>& has_changed) {
+    bool found_solution = sub->extract(*best);
+    if(!x.is_untyped() && found_solution) {
       solutions_found++;
       Sig optimize_sig = is_minimization() ? LT : GT;
       auto k = is_minimization()
@@ -164,6 +167,7 @@ public:
       auto t = sub->interpret_in(F::make_binary(F::make_avar(x), optimize_sig, F::make_z(k), UNTYPED, EXACT, get_allocator()), env).value();
       sub->tell(t, has_changed);
     }
+    return found_solution;
   }
 
   CUDA int solutions_count() const {

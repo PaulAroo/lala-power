@@ -75,7 +75,6 @@ public:
   template <class F, class Env>
   CUDA iresult<F, Env> interpret_in(const F& f, Env& env) {
     if(is_top()) {
-      // We could actually interpret `f` as `false` instead.
       return iresult<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
     }
     auto r = a->interpret_in(f, env);
