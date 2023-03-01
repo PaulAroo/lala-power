@@ -25,9 +25,9 @@ public:
     AVar x;
     bool optimization_mode;
     battery::vector<sub_tell_type, Alloc2> sub_tells;
-    CUDA tell_type() = default;
-    CUDA tell_type(tell_type&&) = default;
-    CUDA tell_type(const tell_type&) = default;
+    tell_type() = default;
+    tell_type(tell_type&&) = default;
+    tell_type(const tell_type&) = default;
     CUDA tell_type(AVar x, bool opt): x(x), optimization_mode(opt) {}
   };
 
