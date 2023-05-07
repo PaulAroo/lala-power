@@ -1,6 +1,6 @@
 // Copyright 2022 Pierre Talbot
 
-#include "search_tree.hpp"
+#include "lala/search_tree.hpp"
 #include "helper.hpp"
 
 using SplitInputLB = Split<IStore, InputOrder<IStore>, LowerBound<IStore>>;

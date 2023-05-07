@@ -3,11 +3,11 @@
 #ifndef SEARCH_TREE_HPP
 #define SEARCH_TREE_HPP
 
-#include "logic/logic.hpp"
-#include "universes/upset_universe.hpp"
-#include "copy_dag_helper.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
+#include "lala/logic/logic.hpp"
+#include "lala/universes/primitive_upset.hpp"
+#include "lala/copy_dag_helper.hpp"
 
 namespace lala {
 
@@ -45,9 +45,9 @@ public:
      stack(this->a->get_allocator()), root_formulas(this->a->get_allocator())
   {}
 
-  template<class Alloc2>
-  CUDA SearchTree(const SearchTree<A, Alloc2>& other, AbstractDeps<allocator_type>& deps)
-   : atype(other.atype), a(deps.clone(other.a)), split(deps.clone(other.split)),
+  template<class A2, class Alloc2, class FastAlloc>
+  CUDA SearchTree(const SearchTree<A2, Alloc2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<Split>(other.split)),
      stack(other.stack), root(other.root), root_formulas(other.root_formulas)
   {}
 
@@ -64,7 +64,7 @@ public:
   }
 
   CUDA local::BDec is_bot() const {
-    // We need short-circuit using && (instead of `land`) due to `a` possibly a null pointer.
+    // We need short-circuit using && due to `a` possibly a null pointer.
     return is_singleton() && a->is_bot();
   }
 

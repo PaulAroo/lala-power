@@ -3,8 +3,8 @@
 #ifndef BRANCH_HPP
 #define BRANCH_HPP
 
-#include "logic/logic.hpp"
-#include "vector.hpp"
+#include "battery/vector.hpp"
+#include "lala/logic/logic.hpp"
 
 namespace lala {
 

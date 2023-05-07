@@ -3,10 +3,10 @@
 #ifndef VALUE_ORDER_HPP
 #define VALUE_ORDER_HPP
 
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
 #include "branch.hpp"
-#include "logic/logic.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "lala/logic/logic.hpp"
 
 namespace lala {
 
@@ -27,9 +27,9 @@ public:
   CUDA LowerBound(battery::shared_ptr<A, allocator_type> a)
    : a(std::move(a)) {}
 
-  template<class A2, class Alloc3>
-  CUDA LowerBound(const LowerBound<A2, appx>& other, AbstractDeps<allocator_type, Alloc3>& deps)
-   : a(deps.clone(other.a)) {}
+  template<class A2, class FastAlloc>
+  CUDA LowerBound(const LowerBound<A2, appx>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : a(deps.template clone<A>(other.a)) {}
 
   /** Create two formulas of the form `x = lb \/ x > lb`.
    *  We suppose that `a` is able to interpret those constraints. */

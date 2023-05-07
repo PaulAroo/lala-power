@@ -3,10 +3,10 @@
 #ifndef SPLIT_HPP
 #define SPLIT_HPP
 
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
 #include "branch.hpp"
-#include "logic/logic.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "lala/logic/logic.hpp"
 
 namespace lala {
 
@@ -25,8 +25,8 @@ public:
   CUDA Split(AType atype, VariableOrder&& var_order, ValueOrder&& val_order)
   : atype(atype), var_order(std::move(var_order)), val_order(std::move(val_order)) {}
 
-  template<class A2, class VarO2, class ValO2>
-  CUDA Split(const Split<A2, VarO2, ValO2>& other, AbstractDeps<allocator_type>& deps)
+  template<class A2, class VarO2, class ValO2, class FastAlloc>
+  CUDA Split(const Split<A2, VarO2, ValO2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
    : atype(other.atype), var_order(other.var_order, deps), val_order(other.val_order, deps) {}
 
   CUDA AType aty() const {

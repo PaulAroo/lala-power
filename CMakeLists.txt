@@ -72,15 +72,13 @@ target_include_directories(lala_search INTERFACE include)
 
 if(GPU)
     set_property(TARGET lala_search PROPERTY CUDA_ARCHITECTURES 75)
-    set_property(TARGET lala_search APPEND PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 endif()
 
 target_compile_options(lala_search INTERFACE
     $<$<COMPILE_LANGUAGE:CUDA>:
         --expt-relaxed-constexpr
-        -rdc=true>
+        $<$<CONFIG:Debug>:-G>>
     $<$<CONFIG:Debug>:-g -DDEBUG>
-    $<$<CONFIG:LDebug>:-g -DTRACE>
 )
 
 if(LALASEARCH_BUILD_TESTS)

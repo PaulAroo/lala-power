@@ -3,11 +3,11 @@
 #ifndef BAB_HPP
 #define BAB_HPP
 
-#include "logic/logic.hpp"
-#include "universes/upset_universe.hpp"
-#include "copy_dag_helper.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
+#include "lala/logic/logic.hpp"
+#include "lala/universes/primitive_upset.hpp"
+#include "lala/copy_dag_helper.hpp"
 
 namespace lala {
 
@@ -47,17 +47,18 @@ private:
 public:
   CUDA BAB(AType atype, sub_ptr sub)
    : atype(atype), sub(std::move(sub)), x(),
-     solutions_found(0),
-     best(AbstractDeps<allocator_type>(this->sub->get_allocator()).clone(this->sub))
+     solutions_found(0)
   {
     assert(this->sub);
+    auto deps = AbstractDeps<allocator_type>(this->sub->get_allocator());
+    best = deps.template clone<sub_type>(this->sub);
     assert(this->best);
   }
 
-  template<class A2>
-  CUDA BAB(const BAB<A2>& other, AbstractDeps<allocator_type>& deps)
-   : atype(other.atype), sub(deps.clone(other.sub)),
-     best(deps.clone(other.best)), x(other.x), optimization_mode(other.optimization_mode)
+  template<class A2, class FastAlloc>
+  CUDA BAB(const BAB<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : atype(other.atype), sub(deps.template clone<A>(other.sub)),
+     best(deps.template clone<A>(other.best)), x(other.x), optimization_mode(other.optimization_mode)
   {}
 
   CUDA AType aty() const {

@@ -3,10 +3,10 @@
 #ifndef VARIABLE_ORDER_HPP
 #define VARIABLE_ORDER_HPP
 
-#include "logic/logic.hpp"
-#include "universes/upset_universe.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
+#include "lala/logic/logic.hpp"
+#include "lala/universes/primitive_upset.hpp"
 
 namespace lala {
 
@@ -27,9 +27,9 @@ public:
   VariableOrder(VariableOrder&&) = default;
   CUDA VariableOrder(battery::shared_ptr<A, allocator_type> a) : a(a) {}
 
-  template<class A2>
-  CUDA VariableOrder(const VariableOrder<A2>& other, AbstractDeps<allocator_type>& deps)
-   : vars(other.vars), a(deps.clone(other.a)) {}
+  template<class A2, class FastAlloc>
+  CUDA VariableOrder(const VariableOrder<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : vars(other.vars), a(deps.template clone<A>(other.a)) {}
 
   template <class Env>
   CUDA void interpret_in(const Env& env) {
@@ -65,8 +65,8 @@ public:
   CUDA InputOrder(battery::shared_ptr<A, allocator_type> a, const LVarArray& lvars)
    : VariableOrder<A>(std::move(a)) {}
 
-  template<class A2>
-  CUDA InputOrder(const InputOrder<A2>& other, AbstractDeps<allocator_type>& deps)
+  template<class A2, class FastAlloc>
+  CUDA InputOrder(const InputOrder<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
    : VariableOrder<A>(other, deps), smallest(other.smallest) {}
 
   CUDA int num_refinements() const {
