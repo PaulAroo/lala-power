@@ -8,18 +8,18 @@
 
 #include "abstract_testing.hpp"
 
-#include "vstore.hpp"
-#include "cartesian_product.hpp"
-#include "interval.hpp"
-#include "pc.hpp"
-#include "terms.hpp"
-#include "fixpoint.hpp"
-#include "vector.hpp"
-#include "shared_ptr.hpp"
+#include "battery/vector.hpp"
+#include "battery/shared_ptr.hpp"
+#include "lala/vstore.hpp"
+#include "lala/cartesian_product.hpp"
+#include "lala/interval.hpp"
+#include "lala/pc.hpp"
+#include "lala/terms.hpp"
+#include "lala/fixpoint.hpp"
 
-#include "value_order.hpp"
-#include "variable_order.hpp"
-#include "split.hpp"
+#include "lala/value_order.hpp"
+#include "lala/variable_order.hpp"
+#include "lala/split.hpp"
 
 using namespace lala;
 using namespace battery;
@@ -47,7 +47,7 @@ const AType bab_ty = 4;
 template <class A>
 void seq_refine_check(A& a, local::BInc expect_changed = true) {
   local::BInc has_changed;
-  GaussSeidelIteration::iterate(a, has_changed);
+  GaussSeidelIteration{}.iterate(a, has_changed);
   EXPECT_EQ(has_changed, expect_changed);
 }
 

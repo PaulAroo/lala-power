@@ -31,8 +31,14 @@ public:
     CUDA tell_type(AVar x, bool opt): x(x), optimization_mode(opt) {}
   };
 
+  template <class Alloc2>
+  using ask_type = battery::vector<sub_type::ask_type<Alloc2>, Alloc2>;
+
   template<class F, class Env>
-  using iresult = IResult<tell_type<typename Env::allocator_type>, F>;
+  using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
+
+  template<class F, class Env>
+  using iresult_ask = IResult<tell_type<typename Env::allocator_type>, F>;
 
   constexpr static const char* name = "BAB";
 
@@ -78,11 +84,16 @@ public:
   }
 
 private:
-  template <class F, class Env>
-  CUDA void interpret_sub(iresult<F, Env>& res, const F& f, Env& env) {
-    auto sub_res = sub->interpret_in(f, env);
+  template <bool is_tell, class R, class F, class Env>
+  CUDA void interpret_sub(R& res, const F& f, Env& env) {
+    auto sub_res = is_tell ? sub->interpret_tell_in(f, env) : sub->interpret_ask_in(f, env);
     if(sub_res.has_value()) {
-      res.value().sub_tells.push_back(std::move(sub_res.value()));
+      if constexpr(is_tell) {
+        res.value().sub_tells.push_back(std::move(sub_res.value()));
+      }
+      else {
+        res.value().push_back(std::move(sub_res.value()));
+      }
       res.join_warnings(std::move(sub_res));
     }
     else {
@@ -91,7 +102,7 @@ private:
   }
 
   template <class F, class Env>
-  CUDA void interpret_optimization_predicate(iresult<F, Env>& res, const F& f, Env& env) {
+  CUDA void interpret_optimization_predicate(iresult_tell<F, Env>& res, const F& f, Env& env) {
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
         res.value().optimization_mode = f.sig() == MINIMIZE;
@@ -114,13 +125,13 @@ private:
         return;
       }
     }
-    interpret_sub(res, f, env);
+    interpret_sub<true>(res, f, env);
   }
 
 public:
   template <class F, class Env>
-  CUDA iresult<F, Env> interpret_in(const F& f, Env& env) {
-    iresult<F, Env> res(tell_type<typename Env::allocator_type>{});
+  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+    iresult_tell<F, Env> res(tell_type<typename Env::allocator_type>{});
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq)) {
         if(f.sig() == AND) {
@@ -134,8 +145,15 @@ public:
       }
     }
     else {
-      interpret_sub(res, f, env);
+      interpret_sub<true>(res, f, env);
     }
+    return std::move(res);
+  }
+
+  template <class F, class Env>
+  CUDA iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
+    iresult_ask<F, Env> res{env.get_allocator()};
+    interpret_sub<false>(res, f, env);
     return std::move(res);
   }
 

@@ -18,6 +18,8 @@ public:
   using branch_type = typename Split::branch_type;
   template <class Alloc>
   using tell_type = typename A::tell_type<Alloc>;
+  template <class Alloc>
+  using ask_type = typename A::ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = battery::shared_ptr<A, allocator_type>;
@@ -25,7 +27,11 @@ public:
   using this_type = SearchTree<A, Split>;
 
   template<class F, class Env>
-  using iresult = typename A::iresult<F, Env>;
+  using iresult_tell = typename A::iresult_tell<F, Env>;
+
+  template<class F, class Env>
+  using iresult_ask = typename A::iresult_ask<F, Env>;
+
   constexpr static const char* name = "SearchTree";
 
 private:
@@ -73,15 +79,20 @@ public:
   }
 
   template <class F, class Env>
-  CUDA iresult<F, Env> interpret_in(const F& f, Env& env) {
+  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(is_top()) {
       return iresult<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
     }
-    auto r = a->interpret_in(f, env);
+    auto r = a->interpret_tell_in(f, env);
     if(r.has_value()) {
       split->interpret_in(env);
     }
     return std::move(r);
+  }
+
+  template <class F, class Env>
+  CUDA iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
+    return a->interpret_ask_in(f, env);
   }
 
   template <class Alloc, class Mem>

@@ -18,7 +18,7 @@ TEST(BranchTest, InputOrderTest) {
   VarEnv<StandardAllocator> env;
   shared_ptr<IStore, StandardAllocator> store =
     make_shared<IStore, StandardAllocator>(std::move(
-      interpret_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
+      interpret_tell_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
         constraint int_ge(x1, 0); constraint int_le(x1, 10);\
         constraint int_ge(x2, 0); constraint int_le(x2, 10);\
         constraint int_ge(x3, 0); constraint int_le(x3, 10);\
@@ -26,7 +26,7 @@ TEST(BranchTest, InputOrderTest) {
         constraint int_ge(x5, 0); constraint int_le(x5, 10);", env)));
 
   InputOrder<IStore> input_order(store);
-  input_order.interpret_in(env);
+  input_order.interpret_tell_in(env);
   EXPECT_FALSE(input_order.project().has_value());
   seq_refine_check(input_order);
   EXPECT_TRUE(input_order.project().has_value());
@@ -87,7 +87,7 @@ TEST(BranchTest, LowerBoundTest) {
   VarEnv<StandardAllocator> env;
   shared_ptr<IStore, StandardAllocator> store =
     make_shared<IStore, StandardAllocator>(std::move(
-      interpret_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
+      interpret_tell_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
         constraint int_ge(x1, 0); constraint int_le(x1, 10);\
         constraint int_ge(x2, 0); constraint int_le(x2, 10);\
         constraint int_ge(x3, 0); constraint int_le(x3, 10);\
