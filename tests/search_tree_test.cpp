@@ -3,8 +3,7 @@
 #include "lala/search_tree.hpp"
 #include "helper.hpp"
 
-using SplitInputLB = Split<IStore, InputOrder<IStore>, LowerBound<IStore>>;
-using ST = SearchTree<IStore, SplitInputLB>;
+using ST = SearchTree<IStore>;
 
 template <class A>
 void check_solution(A& a, vector<int> solution) {
@@ -13,83 +12,99 @@ void check_solution(A& a, vector<int> solution) {
   }
 }
 
+bool all_assigned(const IStore& a) {
+  for(int i = 0; i < a.vars(); ++i) {
+    if(a[i].lb() != a[i].ub()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 TEST(SearchTreeTest, EnumerationSolution) {
-  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
-  auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
-  auto search_tree = ST(tty, store, split);
+  FlatZincOutput<standard_allocator> output;
+  lala::impl::FlatZincParser<standard_allocator> parser(output);
+  auto f = parser.parse("array[1..3] of var 0..2: a;\
+    solve::int_search(a, input_order, indomain_min, complete) satisfy;");
+  EXPECT_TRUE(f);
+  VarEnv<standard_allocator> env;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  auto search_tree = ST(env.extends_abstract_dom(), store, split);
+
   EXPECT_TRUE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  VarEnv<StandardAllocator> env;
-  interpret_and_tell(search_tree,
-    "var int: x1; var int: x2; var int: x3;\
-    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
-    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
-    constraint int_ge(x3, 0); constraint int_le(x3, 2);", env);
+  auto st_res = search_tree.interpret_tell_in(*f, env);
+  EXPECT_TRUE(st_res.has_value());
+  local::BInc has_changed;
+  search_tree.tell(st_res.value(), has_changed);
+  EXPECT_TRUE(has_changed);
 
   EXPECT_FALSE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  AbstractDeps<StandardAllocator> deps;
+  AbstractDeps<standard_allocator> deps;
   ST sol(search_tree, deps);
 
   int solutions = 0;
   for(int x1 = 0; x1 < 3; ++x1) {
     for(int x2 = 0; x2 < 3; ++x2) {
       for(int x3 = 0; x3 < 3; ++x3) {
-        // Going down a branch of the search tree.
-        bool leaf = false;
-        while(!leaf) {
-          local::BInc has_changed;
-          split->reset();
-          GaussSeidelIteration::iterate(*split, has_changed);
-          // There is no constraint so we are always navigating the under-approximated space.
-          EXPECT_TRUE(search_tree.extract(sol));
-          // All variables are supposed to be assigned if nothing changed.
-          if(!has_changed.value()) {
-            check_solution(sol, {x1, x2, x3});
-            solutions++;
-            leaf = true;
-          }
-          search_tree.refine(env, has_changed);
+        // Going down a branch of the search tree until all variables are assigned.
+        do {
+          has_changed.dtell_bot();
+          search_tree.refine(has_changed);
           EXPECT_TRUE(has_changed);
-        }
+        } while(!all_assigned(*store));
+        // There is no constraint so we are always navigating the under-approximated space.
+        EXPECT_TRUE(search_tree.extract(sol));
+        // All variables are supposed to be assigned if nothing changed.
+        check_solution(sol, {x1, x2, x3});
+        solutions++;
       }
     }
   }
+  EXPECT_FALSE(search_tree.is_top());
+  EXPECT_FALSE(search_tree.is_bot());
+  has_changed.dtell_bot();
+  search_tree.refine(has_changed);
+  EXPECT_TRUE(has_changed);
   EXPECT_TRUE(search_tree.is_top());
   EXPECT_FALSE(search_tree.is_bot());
-  local::BInc has_changed;
-  search_tree.refine(env, has_changed);
+  has_changed.dtell_bot();
+  search_tree.refine(has_changed);
   EXPECT_FALSE(has_changed);
   EXPECT_TRUE(search_tree.is_top());
   EXPECT_FALSE(search_tree.is_bot());
   EXPECT_EQ(solutions, 3*3*3);
 }
 
-using ISplitInputLB = Split<IPC, InputOrder<IPC>, LowerBound<IPC>>;
-using IST = SearchTree<IPC, ISplitInputLB>;
+using IST = SearchTree<IPC>;
 
 TEST(SearchTreeTest, ConstrainedEnumeration) {
-  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
-  auto ipc = make_shared<IPC, StandardAllocator>(IPC(pty, store));
-  auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
-  auto search_tree = IST(tty, ipc, split);
+  FlatZincOutput<standard_allocator> output;
+  lala::impl::FlatZincParser<standard_allocator> parser(output);
+  auto f = parser.parse("array[1..3] of var 0..2: a;\
+    constraint int_plus(a[1], a[2], a[3]);\
+    solve::int_search(a, input_order, indomain_min, complete) satisfy;");
+  EXPECT_TRUE(f);
+  VarEnv<standard_allocator> env;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  auto ipc = make_shared<IPC, standard_allocator>(IPC(env.extends_abstract_dom(), store));
+  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
+  auto search_tree = IST(env.extends_abstract_dom(), ipc, split);
+
   EXPECT_TRUE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  VarEnv<StandardAllocator> env;
-  interpret_and_tell(search_tree,
-    "var int: x1; var int: x2; var int: x3;\
-    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
-    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
-    constraint int_ge(x3, 0); constraint int_le(x3, 2);\
-    constraint int_plus(x1, x2, x3);", env);
+  auto st_res = search_tree.interpret_tell_in(*f, env);
+  EXPECT_TRUE(st_res.has_value());
+  local::BInc has_changed;
+  search_tree.tell(st_res.value(), has_changed);
+  EXPECT_TRUE(has_changed);
 
-  EXPECT_FALSE(search_tree.is_bot());
-  EXPECT_FALSE(search_tree.is_top());
-
-  AbstractDeps<StandardAllocator> deps;
+  AbstractDeps<standard_allocator> deps;
   IST sol(search_tree, deps);
 
   int solutions = 0;
@@ -100,25 +115,24 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
     {1, 0, 1},
     {1, 1, 2},
     {2, 0, 2}} ;
-  local::BInc has_changed = true;
+  has_changed = true;
   int iterations = 0;
   while(has_changed) {
     ++iterations;
     has_changed = false;
-    GaussSeidelIteration::fixpoint(*ipc, has_changed);
-    split->reset();
-    GaussSeidelIteration::iterate(*split, has_changed);
-    if(search_tree.extract(sol)) {
+    GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+    if(all_assigned(*store) && search_tree.extract(sol)) {
       check_solution(sol, sols[solutions++]);
     }
-    search_tree.refine(env, has_changed);
+    search_tree.refine(has_changed);
+    // std::cout << *store << std::endl;
   }
   EXPECT_EQ(iterations, 12);
   EXPECT_TRUE(search_tree.is_top());
   EXPECT_FALSE(search_tree.is_bot());
   has_changed = local::BInc::bot();
-  GaussSeidelIteration::fixpoint(*ipc, has_changed);
-  search_tree.refine(env, has_changed);
+  GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+  search_tree.refine(has_changed);
   EXPECT_FALSE(has_changed);
   EXPECT_TRUE(search_tree.is_top());
   EXPECT_FALSE(search_tree.is_bot());

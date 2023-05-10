@@ -101,10 +101,10 @@ target_link_libraries(split_test cuda_battery lala_core lala_parsing lala_pc lal
 target_include_directories(split_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
 gtest_discover_tests(split_test)
 
-# add_executable(search_tree_test tests/search_tree_test.cpp)
-# target_link_libraries(search_tree_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
-# target_include_directories(search_tree_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
-# gtest_discover_tests(search_tree_test)
+add_executable(search_tree_test tests/search_tree_test.cpp)
+target_link_libraries(search_tree_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
+target_include_directories(search_tree_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
+gtest_discover_tests(search_tree_test)
 
 # add_executable(bab_test tests/bab_test.cpp)
 # target_link_libraries(bab_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)

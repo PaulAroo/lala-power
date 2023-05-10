@@ -9,19 +9,21 @@
 #include "lala/universes/primitive_upset.hpp"
 #include "lala/copy_dag_helper.hpp"
 
+#include "split_strategy.hpp"
+
 namespace lala {
 
 template <class A>
 class SearchTree {
 public:
   using allocator_type = typename A::allocator_type;
-  using branch_type = typename Split::branch_type;
+  using split_type = SplitStrategy<A>;
+  using branch_type = typename split_type::branch_type;
   template <class Alloc>
   using ask_type = typename A::ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = battery::shared_ptr<A, allocator_type>;
-  using split_type = SplitStrategy<A>;
   using split_ptr = battery::shared_ptr<split_type, allocator_type>;
   using this_type = SearchTree<A>;
 
@@ -61,9 +63,9 @@ public:
      stack(this->a->get_allocator()), root_tell(this->a->get_allocator())
   {}
 
-  template<class A2, class Alloc2, class FastAlloc>
-  CUDA SearchTree(const SearchTree<A2, Alloc2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
-   : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<Split>(other.split)),
+  template<class A2, class FastAlloc>
+  CUDA SearchTree(const SearchTree<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<split_type>(other.split)),
      stack(other.stack), root(other.root), root_tell(other.root_tell)
   {}
 
@@ -89,20 +91,20 @@ public:
   }
 
 private:
-  template <class F, class Env, class Alloc>
+  template <class F, class Env>
   CUDA void interpret_tell_in(const F& f, Env& env, iresult_tell<F, Env>& res) {
-    if(f.is(Seq) && f.seq().sig() == AND) {
-      for(int i = 0; !res.is_error() && i < f.seq().size(); ++i) {
+    if(f.is(F::Seq) && f.sig() == AND) {
+      for(int i = 0; res.has_value() && i < f.seq().size(); ++i) {
         interpret_tell_in(f.seq(i), env, res);
       }
     }
-    else if(f.is(ESeq) && f.seq().esig() == "search") {
+    else if(f.is(F::ESeq) && f.esig() == "search") {
       auto split_res = split->interpret_tell_in(f, env);
       if(split_res.has_value()) {
         res.value().split_tells.push_back(std::move(split_res.value()));
       }
       else {
-        res = iresult_tell<F, Env>(split_res.error());
+        res = iresult_tell<F, Env>(std::move(split_res.error()));
       }
     }
     else {
@@ -111,7 +113,7 @@ private:
         res.value().sub_tells.push_back(std::move(r.value()));
       }
       else {
-        res = iresult_tell<F, Env>(r.error());
+        res = iresult_tell<F, Env>(std::move(r.error()));
       }
     }
   }
@@ -120,7 +122,7 @@ public:
   template <class F, class Env>
   CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(is_top()) {
-      return iresult<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
+      return iresult_tell<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
     }
     iresult_tell<F, Env> res(tell_type<allocator_type>(env.get_allocator()));
     interpret_tell_in(f, env, res);
