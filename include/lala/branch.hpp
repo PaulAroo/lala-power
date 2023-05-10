@@ -47,7 +47,7 @@ public:
   }
 
   CUDA const tell_type& current() const {
-    assert(!is_pruned() && current_idx != -1 && current_idx < children.size());
+    assert(current_idx != -1 && current_idx < children.size());
     return children[current_idx];
   }
 };

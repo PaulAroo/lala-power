@@ -11,23 +11,30 @@
 
 namespace lala {
 
-template <class A, class Split>
+template <class A>
 class SearchTree {
 public:
   using allocator_type = typename A::allocator_type;
   using branch_type = typename Split::branch_type;
   template <class Alloc>
-  using tell_type = typename A::tell_type<Alloc>;
-  template <class Alloc>
   using ask_type = typename A::ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = battery::shared_ptr<A, allocator_type>;
-  using split_ptr = battery::shared_ptr<Split, allocator_type>;
-  using this_type = SearchTree<A, Split>;
+  using split_type = SplitStrategy<A>;
+  using split_ptr = battery::shared_ptr<split_type, allocator_type>;
+  using this_type = SearchTree<A>;
+
+  template <class Alloc>
+  struct tell_type {
+    battery::vector<typename A::tell_type<Alloc>, Alloc> sub_tells;
+    battery::vector<typename split_type::tell_type<Alloc>, Alloc> split_tells;
+    CUDA tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
+    CUDA tell_type(const tell_type&) = default;
+  };
 
   template<class F, class Env>
-  using iresult_tell = typename A::iresult_tell<F, Env>;
+  using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
 
   template<class F, class Env>
   using iresult_ask = typename A::iresult_ask<F, Env>;
@@ -41,20 +48,23 @@ private:
   sub_ptr a;
   split_ptr split;
   battery::vector<branch_type, allocator_type> stack;
-  typename A::snapshot_type<allocator_type> root;
-  // Formulas to be added to root on backtracking.
-  battery::vector<tell_type<allocator_type>, allocator_type> root_formulas;
+  using root_type = battery::tuple<
+    typename sub_type::snapshot_type<allocator_type>,
+    typename split_type::snapshot_type<allocator_type>>;
+  root_type root;
+  // Tell formulas (and strategies) to be added to root on backtracking.
+  tell_type<allocator_type> root_tell;
 
 public:
   CUDA SearchTree(AType uid, sub_ptr a, split_ptr split)
    : atype(uid), a(std::move(a)), split(std::move(split)),
-     stack(this->a->get_allocator()), root_formulas(this->a->get_allocator())
+     stack(this->a->get_allocator()), root_tell(this->a->get_allocator())
   {}
 
   template<class A2, class Alloc2, class FastAlloc>
   CUDA SearchTree(const SearchTree<A2, Alloc2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
    : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<Split>(other.split)),
-     stack(other.stack), root(other.root), root_formulas(other.root_formulas)
+     stack(other.stack), root(other.root), root_tell(other.root_tell)
   {}
 
   CUDA AType aty() const {
@@ -78,16 +88,43 @@ public:
     return !bool(a);
   }
 
+private:
+  template <class F, class Env, class Alloc>
+  CUDA void interpret_tell_in(const F& f, Env& env, iresult_tell<F, Env>& res) {
+    if(f.is(Seq) && f.seq().sig() == AND) {
+      for(int i = 0; !res.is_error() && i < f.seq().size(); ++i) {
+        interpret_tell_in(f.seq(i), env, res);
+      }
+    }
+    else if(f.is(ESeq) && f.seq().esig() == "search") {
+      auto split_res = split->interpret_tell_in(f, env);
+      if(split_res.has_value()) {
+        res.value().split_tells.push_back(std::move(split_res.value()));
+      }
+      else {
+        res = iresult_tell<F, Env>(split_res.error());
+      }
+    }
+    else {
+      auto r = a->interpret_tell_in(f, env);
+      if(r.has_value()) {
+        res.value().sub_tells.push_back(std::move(r.value()));
+      }
+      else {
+        res = iresult_tell<F, Env>(r.error());
+      }
+    }
+  }
+
+public:
   template <class F, class Env>
   CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(is_top()) {
       return iresult<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
     }
-    auto r = a->interpret_tell_in(f, env);
-    if(r.has_value()) {
-      split->interpret_in(env);
-    }
-    return std::move(r);
+    iresult_tell<F, Env> res(tell_type<allocator_type>(env.get_allocator()));
+    interpret_tell_in(f, env, res);
+    return res;
   }
 
   template <class F, class Env>
@@ -95,16 +132,32 @@ public:
     return a->interpret_ask_in(f, env);
   }
 
+private:
+  template <class Alloc, class Mem>
+  CUDA void tell_current(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
+    for(int i = 0; i < t.sub_tells.size(); ++i) {
+      a->tell(t.sub_tells[i], has_changed);
+    }
+    for(int i = 0; i < t.split_tells.size(); ++i) {
+      split->tell(t.split_tells[i], has_changed);
+    }
+  }
+public:
+
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
     if(!is_top()) {
       if(!is_singleton()) {
         // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
-        root_formulas.push_back(t);
+        for(int i = 0; i < t.sub_tells.size(); ++i) {
+          root_tell.sub_tells.push_back(t.sub_tells[i]);
+        }
+        for(int i = 0; i < t.split_tells.size(); ++i) {
+          root_tell.split_tells.push_back(t.split_tells[i]);
+        }
       }
       // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
-      a->tell(t, has_changed);
-      has_changed.tell_top();
+      tell_current(t, has_changed);
     }
     return *this;
   }
@@ -114,9 +167,9 @@ public:
    * In short, it initializes `a` to the next node of the search tree.
    * If we observe `a` from the outside of this domain, `a` can backtrack, and therefore does not always evolve extensively and monotonically.
    * Nevertheless, the refinement operator of the search tree abstract domain is extensive and monotonic (if split is) over the search tree. */
-  template <class Env, class Mem>
-  CUDA void refine(Env& env, BInc<Mem>& has_changed) {
-    pop(push(split->split(env)), has_changed);
+  template <class Mem>
+  CUDA void refine(BInc<Mem>& has_changed) {
+    pop(push(split->split()), has_changed);
   }
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
@@ -127,7 +180,8 @@ public:
       assert(bool(ua.a));
       if(a->extract(*ua.a)) {
         ua.stack.clear();
-        ua.root_formulas.clear();
+        ua.root_tell.sub_tells.clear();
+        ua.root_tell.split_tells.clear();
         return true;
       }
     }
@@ -170,7 +224,9 @@ private:
   CUDA bool push(branch_type&& branch) {
     if(branch.size() > 0) {
       if(is_singleton()) {
-        root = a->template snapshot<allocator_type>();
+        root = battery::make_tuple(
+          a->template snapshot<allocator_type>(),
+          split->template snapshot<allocator_type>());
       }
       stack.push_back(std::move(branch));
       return false;
@@ -215,7 +271,8 @@ private:
       stack.pop_back();
     }
     if(!stack.empty()) {
-      a->restore(root);
+      a->restore(battery::get<0>(root));
+      split->restore(battery::get<1>(root));
       tell_root(has_changed);
     }
     else if(a) {
@@ -224,16 +281,23 @@ private:
     }
   }
 
-  /** We do not always have access to the root node, so formulas that are added to the search tree are kept in `root_formulas`.
+  /** We do not always have access to the root node, so formulas that are added to the search tree are kept in `root_tell`.
    * During backtracking, root is available through `a`, and we add to root the formulas stored until now, so they become automatically available to the remaining nodes in the search tree. */
   template <class Mem>
   CUDA void tell_root(BInc<Mem>& has_changed) {
-    if(root_formulas.size() > 0) {
-      for(int i = 0; i < root_formulas.size(); ++i) {
-        a->tell(root_formulas[i], has_changed);
+    if(root_tell.sub_tells.size() > 0 || root_tell.split_tells.size() > 0) {
+      for(int i = 0; i < root_tell.sub_tells.size(); ++i) {
+        a->tell(root_tell.sub_tells[i], has_changed);
       }
-      root_formulas.clear();
-      root = a->template snapshot<allocator_type>();
+      for(int i = 0; i < root_tell.split_tells.size(); ++i) {
+        split->tell(root_tell.split_tells[i], has_changed);
+      }
+      root_tell.sub_tells.clear();
+      root_tell.split_tells.clear();
+      // A new snapshot is necessary since we modified `a` and `split`.
+      root = battery::make_tuple(
+        a->template snapshot<allocator_type>(),
+        split->template snapshot<allocator_type>());
     }
   }
 

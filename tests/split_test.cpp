@@ -2,97 +2,79 @@
 
 #include "helper.hpp"
 
-template <class A, class Env>
-void fix_all_and_test(IStore& store, A& a, Env& env) {
-  for(int i = 2; i < store.vars(); ++i) {
-    LVar<StandardAllocator> x = "x ";
-    x[1] = '0' + i + 1;
-    interpret_and_tell(store, ("constraint int_eq(" + x + ", 1);").data(), env);
-  }
-  a.reset();
-  seq_refine_check(a, local::BInc::bot());
-  EXPECT_FALSE(a.project().has_value());
+void apply_branch_and_test(
+  shared_ptr<IStore, standard_allocator> store,
+  const IStore::tell_type<standard_allocator>& branch,
+  int var_idx,
+  Itv expected)
+{
+  auto snapshot = store->snapshot();
+  store->tell(branch);
+  EXPECT_EQ((*store)[var_idx], expected);
+  store->restore(snapshot);
+}
+
+void test_strategy(
+  const std::string& variable_order,
+  const std::string& value_order,
+  int var_idx,
+  Itv left,
+  Itv right)
+{
+  FlatZincOutput<standard_allocator> output;
+  lala::impl::FlatZincParser<standard_allocator> parser(output);
+  auto f = parser.parse("var 1..1: x1; var 3..8: x2; var 5..5: x3; var 4..6: x4; var 0..7: x5; var 2..10: x6; var 2..2: x7;");
+  EXPECT_TRUE(f);
+  VarEnv<standard_allocator> env;
+  auto store_res = IStore::interpret_tell(*f, env);
+  shared_ptr<IStore, standard_allocator> store =
+    make_shared<IStore, standard_allocator>(store_res.value());
+  shared_ptr<SplitStrategy<IStore>> split =
+    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  auto strat = parser.parse(
+    "solve::int_search([x1,x2,x3,x4,x5,x6,x7], " + variable_order + ", " + value_order + ", complete) satisfy;");
+  EXPECT_TRUE(strat);
+  auto split_res = split->interpret_tell_in(*strat, env);
+  EXPECT_TRUE(split_res.has_value());
+  split->tell(split_res.value());
+  auto branches = split->split();
+  auto left_branch = branches.next();
+  EXPECT_EQ(branches.size(), 2);
+  EXPECT_EQ(left_branch.size(), 1);
+  EXPECT_EQ(left_branch[0].idx, var_idx);
+  apply_branch_and_test(store, left_branch, var_idx, left);
+  auto right_branch = branches.next();
+  EXPECT_EQ(branches.size(), 2);
+  EXPECT_EQ(right_branch.size(), 1);
+  EXPECT_EQ(right_branch[0].idx, var_idx);
+  apply_branch_and_test(store, right_branch, var_idx, right);
 }
 
 TEST(BranchTest, InputOrderTest) {
-  VarEnv<StandardAllocator> env;
-  shared_ptr<IStore, StandardAllocator> store =
-    make_shared<IStore, StandardAllocator>(std::move(
-      interpret_tell_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
-        constraint int_ge(x1, 0); constraint int_le(x1, 10);\
-        constraint int_ge(x2, 0); constraint int_le(x2, 10);\
-        constraint int_ge(x3, 0); constraint int_le(x3, 10);\
-        constraint int_ge(x4, 0); constraint int_le(x4, 10);\
-        constraint int_ge(x5, 0); constraint int_le(x5, 10);", env)));
+  // Note that for intervals, we cannot exclude values in the middle... so this indomain_median creates constraints that are uninterpretable.
 
-  InputOrder<IStore> input_order(store);
-  input_order.interpret_tell_in(env);
-  EXPECT_FALSE(input_order.project().has_value());
-  seq_refine_check(input_order);
-  EXPECT_TRUE(input_order.project().has_value());
-  EXPECT_EQ(*input_order.project(), AVar(sty, 0));
+  test_strategy("input_order", "indomain_min", 1, Itv(3, 3), Itv(4, 8));
+  test_strategy("input_order", "indomain_max", 1, Itv(8, 8), Itv(3, 7));
+  test_strategy("input_order", "indomain_split", 1, Itv(3, 5), Itv(6, 8));
+  test_strategy("input_order", "indomain_reverse_split", 1, Itv(6, 8), Itv(3, 5));
 
-  // Fix the second variable (in order) to "1". The first variable should still be selected.
-  interpret_and_tell(*store, "constraint int_eq(x2, 1);", env);
-  input_order.reset();
-  seq_refine_check(input_order);
-  EXPECT_TRUE(input_order.project().has_value());
-  EXPECT_EQ(*input_order.project(), AVar(sty, 0));
+  test_strategy("first_fail", "indomain_min", 3, Itv(4, 4), Itv(5, 6));
+  test_strategy("first_fail", "indomain_max", 3, Itv(6, 6), Itv(4, 5));
+  test_strategy("first_fail", "indomain_split", 3, Itv(4, 5), Itv(6, 6));
+  test_strategy("first_fail", "indomain_reverse_split", 3, Itv(6, 6), Itv(4, 5));
 
-  // Fix the first variable (in order) to "1". The third variable should now be selected.
-  interpret_and_tell(*store, "constraint int_eq(x1, 1);", env);
-  input_order.reset();
-  seq_refine_check(input_order);
-  EXPECT_TRUE(input_order.project().has_value());
-  EXPECT_EQ(*input_order.project(), AVar(sty, 2));
+  test_strategy("anti_first_fail", "indomain_min", 5, Itv(2, 2), Itv(3, 10));
+  test_strategy("anti_first_fail", "indomain_max", 5, Itv(10, 10), Itv(2, 9));
+  test_strategy("anti_first_fail", "indomain_split", 5, Itv(2, 6), Itv(7, 10));
+  test_strategy("anti_first_fail", "indomain_reverse_split", 5, Itv(7, 10), Itv(2, 6));
 
-  // Fix all the remaining variables.
-  fix_all_and_test(*store, input_order, env);
-}
+  test_strategy("smallest", "indomain_min", 4, Itv(0, 0), Itv(1, 7));
+  test_strategy("smallest", "indomain_max", 4, Itv(7, 7), Itv(0, 6));
+  test_strategy("smallest", "indomain_split", 4, Itv(0, 3), Itv(4, 7));
+  test_strategy("smallest", "indomain_reverse_split", 4, Itv(4, 7), Itv(0, 3));
 
-template <class A, class TellType>
-void tell_store2(A& a, const TellType& tell) {
-  local::BInc has_changed;
-  a.tell(tell, has_changed);
-  EXPECT_EQ(has_changed, local::BInc::top());
-}
-
-template <class A, class Env>
-void split_and_test(IStore& store, A& a, Env& env, AVar x, Itv expect_left, Itv expect_right) {
-  auto branches = a.split(x, env);
-  EXPECT_TRUE(branches.has_next());
-  EXPECT_EQ(branches.size(), 2);
-  EXPECT_FALSE(branches.is_pruned());
-  auto snapshot = store.snapshot();
-  EXPECT_EQ(store.project(x), meet(expect_left, expect_right));
-  tell_store2(store, branches.next());
-  EXPECT_EQ(store.project(x), expect_left);
-  EXPECT_TRUE(branches.has_next());
-  EXPECT_FALSE(branches.is_pruned());
-  EXPECT_EQ(branches.size(), 2);
-  store.restore(snapshot);
-  tell_store2(store, branches.next());
-  EXPECT_EQ(store.project(x), expect_right);
-  EXPECT_FALSE(branches.has_next());
-  EXPECT_FALSE(branches.is_pruned());
-  EXPECT_EQ(branches.size(), 2);
-  branches.prune();
-  EXPECT_FALSE(branches.has_next());
-  EXPECT_TRUE(branches.is_pruned());
-  store.restore(snapshot);
-  EXPECT_EQ(store.project(x), meet(expect_left, expect_right));
-}
-
-TEST(BranchTest, LowerBoundTest) {
-  VarEnv<StandardAllocator> env;
-  shared_ptr<IStore, StandardAllocator> store =
-    make_shared<IStore, StandardAllocator>(std::move(
-      interpret_tell_to<IStore>("var int: x1; var int: x2; var int: x3; var int: x4; var int: x5;\
-        constraint int_ge(x1, 0); constraint int_le(x1, 10);\
-        constraint int_ge(x2, 0); constraint int_le(x2, 10);\
-        constraint int_ge(x3, 0); constraint int_le(x3, 10);\
-        constraint int_ge(x4, 0); constraint int_le(x4, 10);\
-        constraint int_ge(x5, 0); constraint int_le(x5, 10);", env)));
-  LowerBound<IStore> lb(store);
-  split_and_test(*store, lb, env, AVar(sty, 0), Itv(0,0), Itv(1,10));
+  test_strategy("largest", "indomain_min", 5, Itv(2, 2), Itv(3, 10));
+  test_strategy("largest", "indomain_max", 5, Itv(10, 10), Itv(2, 9));
+  test_strategy("largest", "indomain_split", 5, Itv(2, 6), Itv(7, 10));
+  test_strategy("largest", "indomain_reverse_split", 5, Itv(7, 10), Itv(2, 6));
 }

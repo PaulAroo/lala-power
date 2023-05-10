@@ -17,25 +17,23 @@
 #include "lala/terms.hpp"
 #include "lala/fixpoint.hpp"
 
-#include "lala/value_order.hpp"
-#include "lala/variable_order.hpp"
-#include "lala/split.hpp"
+#include "lala/split_strategy.hpp"
 
 using namespace lala;
 using namespace battery;
 
-using F = TFormula<StandardAllocator>;
+using F = TFormula<standard_allocator>;
 
-static LVar<StandardAllocator> var_x0 = "x0";
-static LVar<StandardAllocator> var_x1 = "x1";
-static LVar<StandardAllocator> var_x2 = "x2";
-static LVar<StandardAllocator> var_z = "z";
-static LVar<StandardAllocator> var_b = "b";
+static LVar<standard_allocator> var_x0 = "x0";
+static LVar<standard_allocator> var_x1 = "x1";
+static LVar<standard_allocator> var_x2 = "x2";
+static LVar<standard_allocator> var_z = "z";
+static LVar<standard_allocator> var_b = "b";
 
 using zi = local::ZInc;
 using zd = local::ZDec;
 using Itv = Interval<zi>;
-using IStore = VStore<Itv, StandardAllocator>;
+using IStore = VStore<Itv, standard_allocator>;
 using IPC = PC<IStore>; // Interval Propagators Completion
 
 const AType sty = 0;
