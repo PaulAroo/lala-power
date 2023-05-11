@@ -32,7 +32,7 @@ public:
     battery::vector<typename A::tell_type<Alloc>, Alloc> sub_tells;
     battery::vector<typename split_type::tell_type<Alloc>, Alloc> split_tells;
     CUDA tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
-    CUDA tell_type(const tell_type&) = default;
+    tell_type(const tell_type&) = default;
   };
 
   template<class F, class Env>
@@ -177,7 +177,8 @@ public:
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
    * The under-approximation consists in a search tree \f$ \{a\} \f$ with a single node.
    * \pre `ua` must be different from `top`. */
-  CUDA bool extract(this_type& ua) const {
+  template <class A2>
+  CUDA bool extract(SearchTree<A2>& ua) const {
     if(!is_top()) {
       assert(bool(ua.a));
       if(a->extract(*ua.a)) {

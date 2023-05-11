@@ -214,12 +214,12 @@ public:
    * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
    * It is safe to use `this.extract(*this)` to avoid allocating memory. */
-  CUDA bool extract(BAB<A>& ua) const {
+  template <class A2>
+  CUDA bool extract(BAB<A2>& ua) const {
     if(solutions_found > 0 && sub->is_top())
     {
       ua.solutions_found = solutions_found;
-      ua.best = best;
-      ua.sub = sub;
+      best->extract(*(ua.best));
       ua.x = x;
       ua.optimization_mode = optimization_mode;
       return true;
