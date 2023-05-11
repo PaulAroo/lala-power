@@ -43,6 +43,9 @@ public:
 
   constexpr static const char* name = "SearchTree";
 
+  template <class A2>
+  friend class SearchTree;
+
 private:
   AType atype;
   // `a` reflects the current node of the search tree being refined and expanded.

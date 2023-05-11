@@ -42,6 +42,9 @@ public:
 
   constexpr static const char* name = "BAB";
 
+  template <class A2>
+  friend class BAB;
+
 private:
   AType atype;
   sub_ptr sub;
