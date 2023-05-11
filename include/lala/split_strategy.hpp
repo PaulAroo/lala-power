@@ -61,6 +61,9 @@ public:
 
   constexpr static const char* name = "SplitStrategy";
 
+  template <class A2>
+  friend class SplitStrategy;
+
 private:
   using universe_type = typename A::universe_type;
   using LB = typename universe_type::LB;
