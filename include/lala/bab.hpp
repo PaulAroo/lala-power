@@ -32,13 +32,13 @@ public:
   };
 
   template <class Alloc2>
-  using ask_type = battery::vector<sub_type::ask_type<Alloc2>, Alloc2>;
+  using ask_type = battery::vector<typename sub_type::ask_type<Alloc2>, Alloc2>;
 
   template<class F, class Env>
   using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
 
   template<class F, class Env>
-  using iresult_ask = IResult<tell_type<typename Env::allocator_type>, F>;
+  using iresult_ask = IResult<ask_type<typename Env::allocator_type>, F>;
 
   constexpr static const char* name = "BAB";
 
@@ -84,9 +84,8 @@ public:
   }
 
 private:
-  template <bool is_tell, class R, class F, class Env>
-  CUDA void interpret_sub(R& res, const F& f, Env& env) {
-    auto sub_res = is_tell ? sub->interpret_tell_in(f, env) : sub->interpret_ask_in(f, env);
+  template <bool is_tell, class R, class SubR, class F, class Env>
+  CUDA void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
     if(sub_res.has_value()) {
       if constexpr(is_tell) {
         res.value().sub_tells.push_back(std::move(sub_res.value()));
@@ -98,6 +97,18 @@ private:
     }
     else {
       res.join_errors(std::move(sub_res));
+    }
+  }
+
+  template <bool is_tell, class R, class F, class Env>
+  CUDA void interpret_sub(R& res, const F& f, Env& env) {
+    if constexpr(is_tell){
+      auto sub_res = sub->interpret_tell_in(f, env);
+      interpret_sub<is_tell>(res, sub_res, f, env);
+    }
+    else {
+      auto sub_res = sub->interpret_ask_in(f, env);
+      interpret_sub<is_tell>(res, sub_res, f, env);
     }
   }
 
@@ -116,37 +127,40 @@ private:
           }
         }
         else {
-          res = iresult<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize. Instead, you can create a new variable with the expression to optimize.", f));
+          res = iresult_tell<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize. Instead, you can create a new variable with the expression to optimize.", f));
         }
         return;
       }
       else if(f.type() == aty()) {
-        res = iresult<F, Env>(IError<F>(true, name, "Unsupported formula.", f));
+        res = iresult_tell<F, Env>(IError<F>(true, name, "Unsupported formula.", f));
         return;
       }
     }
     interpret_sub<true>(res, f, env);
   }
 
-public:
-  template <class F, class Env>
-  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
-    iresult_tell<F, Env> res(tell_type<typename Env::allocator_type>{});
+  template <class R, class F, class Env>
+  CUDA void interpret_tell_in(R& res, const F& f, Env& env) {
     if(f.is_untyped() || f.type() == aty()) {
-      if(f.is(F::Seq)) {
-        if(f.sig() == AND) {
-          for(int i = 0; i < f.seq().size() && res.has_value(); ++i) {
-            interpret_optimization_predicate(res, f.seq(i), env);
-          }
+      if(f.is(F::Seq) && f.sig() == AND) {
+        for(int i = 0; i < f.seq().size(); ++i) {
+          interpret_tell_in(res, f.seq(i), env);
         }
-        else {
-          interpret_optimization_predicate(res, f, env);
-        }
+      }
+      else {
+        interpret_optimization_predicate(res, f, env);
       }
     }
     else {
       interpret_sub<true>(res, f, env);
     }
+  }
+
+public:
+  template <class F, class Env>
+  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+    iresult_tell<F, Env> res(tell_type<typename Env::allocator_type>{});
+    interpret_tell_in(res, f, env);
     return std::move(res);
   }
 
@@ -173,17 +187,20 @@ public:
 
   /** \return `true` if the sub-domain is a solution (more precisely, an under-approximation) of the problem.
       The extracted under-approximation can be retreived by `optimum()`. */
-  template <class Env, class Mem>
-  CUDA bool refine(Env& env, BInc<Mem>& has_changed) {
+  template <class Mem>
+  CUDA bool refine(BInc<Mem>& has_changed) {
     bool found_solution = sub->extract(*best);
     if(!x.is_untyped() && found_solution) {
       solutions_found++;
       Sig optimize_sig = is_minimization() ? LT : GT;
-      auto k = is_minimization()
+      typename sub_type::universe_type k = is_minimization()
         ? best->project(x).lb()
         : best->project(x).ub();
       using F = TFormula<allocator_type>;
-      auto t = sub->interpret_in(F::make_binary(F::make_avar(x), optimize_sig, F::make_z(k), UNTYPED, EXACT, get_allocator()), env).value();
+      VarEnv<allocator_type> empty_env{};
+      F constant = k.template deinterpret<F>();
+      auto opti_fun = F::make_binary(F::make_avar(x), optimize_sig, constant, UNTYPED, get_allocator());
+      auto t = sub->interpret_tell_in(opti_fun, empty_env).value();
       sub->tell(t, has_changed);
     }
     return found_solution;

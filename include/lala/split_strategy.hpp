@@ -251,6 +251,9 @@ public:
    If the next unassigned variable cannot be split, for instance because the value ordering strategy maps to `bot` or `top`, an empty set of branches is returned.
    This also means that you cannot suppose `split(a) = {}` to mean `a` is at `top`. */
   CUDA branch_type split() {
+    if(a->is_top()) {
+      return branch_type{};
+    }
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();

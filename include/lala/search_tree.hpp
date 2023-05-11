@@ -39,7 +39,7 @@ public:
   using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
 
   template<class F, class Env>
-  using iresult_ask = typename A::iresult_ask<F, Env>;
+  using iresult_ask = IResult<typename A::ask_type<typename Env::allocator_type>, F>;
 
   constexpr static const char* name = "SearchTree";
 
@@ -144,8 +144,8 @@ private:
       split->tell(t.split_tells[i], has_changed);
     }
   }
-public:
 
+public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
     if(!is_top()) {

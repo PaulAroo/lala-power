@@ -4,8 +4,7 @@
 #include "lala/bab.hpp"
 #include "helper.hpp"
 
-using SplitInputLB = Split<IStore, InputOrder<IStore>, LowerBound<IStore>>;
-using ST = SearchTree<IStore, SplitInputLB>;
+using ST = SearchTree<IStore>;
 using BAB_ = BAB<ST>;
 
 template <class A>
@@ -17,33 +16,41 @@ void check_solution(A& a, vector<Itv> solution) {
 
 // Minimize is true, maximize is false.
 void test_unconstrained_bab(bool mode) {
-  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
-  auto split = make_shared<SplitInputLB, StandardAllocator>(SplitInputLB(split_ty, store, store));
-  auto search_tree = make_shared<ST, StandardAllocator>(tty, store, split);
-  auto bab = BAB_(bab_ty, search_tree);
+  FlatZincOutput<standard_allocator> output;
+  lala::impl::FlatZincParser<standard_allocator> parser(output);
+  auto f = parser.parse("array[1..3] of var 0..2: a;\
+    solve::int_search(a, input_order, indomain_min, complete)" +
+    std::string(mode ? "minimize" : "maximize") + " a[3];");
+  EXPECT_TRUE(f);
+  // f->print(false);
+  VarEnv<standard_allocator> env;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  auto search_tree = make_shared<ST, standard_allocator>(env.extends_abstract_dom(), store, split);
+  auto bab = BAB_(env.extends_abstract_dom(), search_tree);
 
-  std::cout << "Try interpreted the constraint\n" << std::endl;
-  VarEnv<StandardAllocator> env;
-  interpret_and_tell(bab,
-    ("var int: x1; var int: x2; var int: x3;\
-    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
-    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
-    constraint int_ge(x3, 0); constraint int_le(x3, 2);\
-    solve " + std::string(mode ? "minimize" : "maximize") + " x2;").c_str(), env);
+  EXPECT_TRUE(bab.is_bot());
+  EXPECT_FALSE(bab.is_top());
 
-std::cout << "Successfully interpreted the constraint\n" << std::endl;
+  auto bab_res = bab.interpret_tell_in(*f, env);
+  // bab_res.print_diagnostics();
+  EXPECT_TRUE(bab_res.has_value());
+  local::BInc has_changed;
+  bab.tell(bab_res.value(), has_changed);
+  EXPECT_TRUE(has_changed);
 
-  // Find solution optimizing x2.
+  EXPECT_FALSE(bab.is_bot());
+  EXPECT_FALSE(bab.is_top());
+
+  // Find solution optimizing a[3].
   int iterations = 0;
-  local::BInc has_changed = true;
+  has_changed = true;
   while(!bab.extract(bab) && has_changed) {
     iterations++;
     has_changed = false;
-    split->reset();
     // Compute \f$ pop \circ push \circ split \circ bab \f$.
-    bab.refine(env, has_changed);
-    GaussSeidelIteration::iterate(*split, has_changed);
-    search_tree->refine(env, has_changed);
+    bab.refine(has_changed);
+    search_tree->refine(has_changed);
   }
   // Find the optimum in the root node since they are no constraint...
   check_solution(bab.optimum(), {Itv(0,2),Itv(0,2),Itv(0,2)});
@@ -54,10 +61,8 @@ std::cout << "Successfully interpreted the constraint\n" << std::endl;
 
   // One more iteration to check idempotency.
   has_changed = false;
-  split->reset();
-  bab.refine(env, has_changed);
-  GaussSeidelIteration::iterate(*split, has_changed);
-  search_tree->refine(env, has_changed);
+  bab.refine(has_changed);
+  search_tree->refine(has_changed);
   EXPECT_FALSE(has_changed);
 }
 
@@ -66,40 +71,42 @@ TEST(BABTest, UnconstrainedOptimization) {
   test_unconstrained_bab(false);
 }
 
-using ISplitInputLB = Split<IPC, InputOrder<IPC>, LowerBound<IPC>>;
-using IST = SearchTree<IPC, ISplitInputLB>;
+using IST = SearchTree<IPC>;
 using IBAB = BAB<IST>;
 
 // Minimize is true, maximize is false.
 void test_constrained_bab(bool mode) {
-  auto store = make_shared<IStore, StandardAllocator>(sty, 3);
-  auto ipc = make_shared<IPC, StandardAllocator>(IPC(pty, store));
-  auto split = make_shared<ISplitInputLB, StandardAllocator>(ISplitInputLB(split_ty, ipc, ipc));
-  auto search_tree = make_shared<IST, StandardAllocator>(tty, ipc, split);
-  auto bab = IBAB(bab_ty, search_tree);
+  FlatZincOutput<standard_allocator> output;
+  lala::impl::FlatZincParser<standard_allocator> parser(output);
+  auto f = parser.parse("array[1..3] of var 0..2: a;\
+    constraint int_plus(a[1], a[2], a[3]);\
+    solve::int_search(a, input_order, indomain_min, complete)" +
+    std::string(mode ? "minimize" : "maximize") + " a[3];");
+  EXPECT_TRUE(f);
+  VarEnv<standard_allocator> env;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  auto ipc = make_shared<IPC, standard_allocator>(IPC(env.extends_abstract_dom(), store));
+  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
+  auto search_tree = make_shared<IST, standard_allocator>(env.extends_abstract_dom(), ipc, split);
+  auto bab = IBAB(env.extends_abstract_dom(), search_tree);
 
-  // Interpret formula
-  VarEnv<StandardAllocator> env;
-  interpret_and_tell(bab,
-    ("var int: x1; var int: x2; var int: x3;\
-    constraint int_ge(x1, 0); constraint int_le(x1, 2);\
-    constraint int_ge(x2, 0); constraint int_le(x2, 2);\
-    constraint int_ge(x3, 0); constraint int_le(x3, 2);\
-    constraint int_plus(x1, x2, x3);\
-    solve " + std::string(mode ? "minimize" : "maximize") + " x3;").c_str(), env);
+  auto bab_res = bab.interpret_tell_in(*f, env);
+  // bab_res.print_diagnostics();
+  EXPECT_TRUE(bab_res.has_value());
+  local::BInc has_changed;
+  bab.tell(bab_res.value(), has_changed);
+  EXPECT_TRUE(has_changed);
 
-  // Find solution optimizing x3.
-  local::BInc has_changed = true;
+  // Find solution optimizing a[3].
+  has_changed = true;
   int iterations = 0;
   while(!bab.extract(bab) && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
-    GaussSeidelIteration::fixpoint(*ipc, has_changed);
-    bab.refine(env, has_changed);
-    split->reset();
-    GaussSeidelIteration::iterate(*split, has_changed);
-    search_tree->refine(env, has_changed);
+    GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+    bab.refine(has_changed);
+    search_tree->refine(has_changed);
   }
   EXPECT_TRUE(bab.is_top());
   if(mode) {
@@ -115,11 +122,9 @@ void test_constrained_bab(bool mode) {
 
   // One more iteration to check idempotency.
   has_changed = false;
-  GaussSeidelIteration::fixpoint(*ipc, has_changed);
-  bab.refine(env, has_changed);
-  split->reset();
-  GaussSeidelIteration::iterate(*split, has_changed);
-  search_tree->refine(env, has_changed);
+  GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+  bab.refine(has_changed);
+  search_tree->refine(has_changed);
   EXPECT_FALSE(has_changed);
 }
 
