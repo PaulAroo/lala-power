@@ -270,6 +270,10 @@ public:
       return branch_type{};
     }
   }
+
+  CUDA size_t num_strategies() const {
+    return strategies.size();
+  }
 };
 
 }
