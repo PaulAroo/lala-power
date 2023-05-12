@@ -26,9 +26,15 @@ public:
     bool optimization_mode;
     battery::vector<sub_tell_type, Alloc2> sub_tells;
     tell_type() = default;
-    tell_type(tell_type&&) = default;
-    tell_type(const tell_type&) = default;
+    tell_type(tell_type<Alloc2>&&) = default;
+    tell_type(const tell_type<Alloc2>&) = default;
     CUDA tell_type(AVar x, bool opt): x(x), optimization_mode(opt) {}
+
+    template <class Alloc3>
+    CUDA tell_type(const tell_type<Alloc3>& other):
+      x(other.x), optimization_mode(other.optimization_mode),
+      sub_tells(other.sub_tells)
+    {}
   };
 
   template <class Alloc2>

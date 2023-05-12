@@ -48,10 +48,20 @@ public:
 
   /** A split strategy consists of a variable order and value order on a subset of the variables. */
   template <class Alloc2>
-  using strategy_type = battery::tuple<
-    VariableOrder,
-    ValueOrder,
-    battery::vector<AVar, Alloc2>>;
+  struct strategy_type {
+    VariableOrder var_order;
+    ValueOrder val_order;
+    battery::vector<AVar, Alloc2> vars;
+
+    template <class Alloc3>
+    CUDA strategy_type(const strategy_type<Alloc3>& other)
+    : var_order(other.var_order), val_order(other.val_order), vars(other.vars) {}
+
+    strategy_type(const strategy_type<Alloc2>&) = default;
+
+    CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
+      : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
+  };
 
   template <class Alloc2>
   using tell_type = strategy_type<Alloc2>;
@@ -76,7 +86,7 @@ private:
   int next_unassigned_var;
 
   CUDA const battery::vector<AVar, allocator_type>& current_vars() const {
-    return battery::get<2>(strategies[current_strategy]);
+    return strategies[current_strategy].vars;
   }
 
   CUDA void move_to_next_unassigned_var() {
@@ -114,8 +124,8 @@ private:
 
   CUDA AVar select_var() {
     const auto& strat = strategies[current_strategy];
-    const auto& vars = battery::get<2>(strat);
-    switch(battery::get<0>(strat)) {
+    const auto& vars = strat.vars;
+    switch(strat.var_order) {
       case VariableOrder::INPUT_ORDER: return vars[next_unassigned_var];
       case VariableOrder::FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return u.width().ub(); });
       case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual<LB>(u.width().ub()); });
@@ -231,7 +241,8 @@ public:
           IError<F>(true, name, "A non-variable expression is passed to the predicate `search` after the variable and value order strategies.", f.eseq(i)));
       }
     }
-    return iresult_tell<F, Env>(battery::make_tuple(var_order, val_order, std::move(vars)));
+    return iresult_tell<F, Env>(
+      tell_type<typename Env::allocator_type>(var_order, val_order, std::move(vars)));
   }
 
   template <class Alloc2>
@@ -260,7 +271,7 @@ public:
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();
-      switch(battery::get<1>(strategies[current_strategy])) {
+      switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
         case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());

@@ -33,6 +33,11 @@ public:
     battery::vector<typename split_type::tell_type<Alloc>, Alloc> split_tells;
     CUDA tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
     tell_type(const tell_type&) = default;
+    tell_type(tell_type&&) = default;
+
+    template <class Alloc2>
+    tell_type(const tell_type<Alloc2>& other):
+      sub_tells(other.sub_tells), split_tells(other.split_tells) {}
   };
 
   template<class F, class Env>
