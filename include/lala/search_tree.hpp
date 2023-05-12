@@ -38,6 +38,9 @@ public:
     template <class SearchTreeTellType>
     CUDA tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc()):
       sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc) {}
+
+    template <class Alloc2>
+    friend class tell_type;
   };
 
   template<class F, class Env>

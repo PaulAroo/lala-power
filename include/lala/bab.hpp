@@ -36,6 +36,9 @@ public:
       x(other.x), optimization_mode(other.optimization_mode),
       sub_tells(other.sub_tells, alloc)
     {}
+
+    template <class Alloc3>
+    friend struct tell_type;
   };
 
   template <class Alloc2>

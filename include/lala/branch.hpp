@@ -14,6 +14,9 @@ public:
   using tell_type = TellTy;
   using allocator_type = Alloc;
 
+  template <class TellTy2, class Alloc2>
+  friend class Branch;
+
 private:
   battery::vector<tell_type, allocator_type> children;
   int current_idx;
