@@ -25,6 +25,10 @@ public:
   CUDA Branch(battery::vector<tell_type, allocator_type>&& children)
    : children(std::move(children)), current_idx(-1) {}
 
+  template <class BranchType>
+  CUDA Branch(const BranchType& branch, const allocator_type& alloc = allocator_type())
+   : children(branch.children, alloc), current_idx(branch.current_idx) {}
+
   CUDA int size() const {
     return children.size();
   }

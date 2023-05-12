@@ -28,12 +28,13 @@ public:
     tell_type() = default;
     tell_type(tell_type<Alloc2>&&) = default;
     tell_type(const tell_type<Alloc2>&) = default;
-    CUDA tell_type(AVar x, bool opt): x(x), optimization_mode(opt) {}
+    CUDA tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2()):
+      x(x), optimization_mode(opt), sub_tells(alloc) {}
 
-    template <class Alloc3>
-    CUDA tell_type(const tell_type<Alloc3>& other):
+    template <class BABTellType>
+    CUDA tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2()):
       x(other.x), optimization_mode(other.optimization_mode),
-      sub_tells(other.sub_tells)
+      sub_tells(other.sub_tells, alloc)
     {}
   };
 

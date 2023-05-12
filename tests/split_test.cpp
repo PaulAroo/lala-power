@@ -1,6 +1,7 @@
 // Copyright 2022 Pierre Talbot
 
 #include "helper.hpp"
+#include "battery/memory.hpp"
 
 void apply_branch_and_test(
   shared_ptr<IStore, standard_allocator> store,
@@ -77,4 +78,17 @@ TEST(BranchTest, InputOrderTest) {
   test_strategy("largest", "indomain_max", 5, Itv(10, 10), Itv(2, 9));
   test_strategy("largest", "indomain_split", 5, Itv(2, 6), Itv(7, 10));
   test_strategy("largest", "indomain_reverse_split", 5, Itv(7, 10), Itv(2, 6));
+}
+
+using AItv = Interval<ZInc<int, battery::atomic_memory<standard_allocator>>>;
+using AIStore = VStore<AItv, standard_allocator>;
+
+TEST(BranchTest, CopySplitStrategy) {
+  VarEnv<standard_allocator> env;
+  shared_ptr<IStore, standard_allocator> store =
+    make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 0);
+  shared_ptr<SplitStrategy<IStore>> split =
+    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  AbstractDeps<standard_allocator> deps;
+  auto r = deps.template clone<SplitStrategy<AIStore>>(split);
 }

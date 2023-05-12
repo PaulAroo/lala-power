@@ -53,14 +53,17 @@ public:
     ValueOrder val_order;
     battery::vector<AVar, Alloc2> vars;
 
-    template <class Alloc3>
-    CUDA strategy_type(const strategy_type<Alloc3>& other)
-    : var_order(other.var_order), val_order(other.val_order), vars(other.vars) {}
+    template <class StrategyType>
+    CUDA strategy_type(const StrategyType& other, const Alloc2& alloc = Alloc2())
+    : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
 
     strategy_type(const strategy_type<Alloc2>&) = default;
 
     CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
       : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
+
+    template <class Alloc3>
+    friend class strategy_type;
   };
 
   template <class Alloc2>
