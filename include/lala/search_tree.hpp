@@ -77,8 +77,16 @@ public:
   template<class A2, class FastAlloc>
   CUDA SearchTree(const SearchTree<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
    : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<split_type>(other.split)),
-     stack(other.stack), root(other.root), root_tell(other.root_tell)
-  {}
+    //  stack(other.stack),
+     stack(this->a->get_allocator()),
+     root(other.root),
+     root_tell(this->a->get_allocator())
+    //  root_tell(other.root_tell)
+  {
+    assert(other.stack.empty());
+    assert(other.root_tell.sub_tells.empty());
+    assert(other.root_tell.split_tells.empty());
+  }
 
   CUDA AType aty() const {
     return atype;

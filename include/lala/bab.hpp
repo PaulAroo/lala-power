@@ -11,13 +11,15 @@
 
 namespace lala {
 
-template <class A>
+template <class A, class B = A>
 class BAB {
 public:
   using allocator_type = typename A::allocator_type;
   using sub_type = A;
   using sub_ptr = battery::shared_ptr<A, allocator_type>;
-  using this_type = BAB<A>;
+  using best_type = B;
+  using best_ptr = battery::shared_ptr<B, allocator_type>;
+  using this_type = BAB<A, B>;
 
   template <class Alloc2>
   struct tell_type {
@@ -52,13 +54,13 @@ public:
 
   constexpr static const char* name = "BAB";
 
-  template <class A2>
+  template <class A2, class B2>
   friend class BAB;
 
 private:
   AType atype;
   sub_ptr sub;
-  sub_ptr best;
+  best_ptr best;
   AVar x;
   bool optimization_mode; // `true` for minimization, `false` for maximization.
   int solutions_found;
@@ -69,16 +71,20 @@ public:
      solutions_found(0)
   {
     assert(this->sub);
-    auto deps = AbstractDeps<allocator_type>(this->sub->get_allocator());
-    best = deps.template clone<sub_type>(this->sub);
+    auto deps = AbstractDeps<allocator_type>(this->sub->get_allocator(), this->sub->get_allocator());
+    best = deps.template clone<best_type>(this->sub);
     assert(this->best);
   }
 
-  template<class A2, class FastAlloc>
-  CUDA BAB(const BAB<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
-   : atype(other.atype), sub(deps.template clone<A>(other.sub)),
-     best(deps.template clone<A>(other.best)), x(other.x), optimization_mode(other.optimization_mode)
-  {}
+  template<class A2, class B2, class FastAlloc>
+  CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+   : atype(other.atype), sub(deps.template clone<sub_type>(other.sub))
+   , x(other.x), optimization_mode(other.optimization_mode)
+  {
+    // We declare `deps2` otherwise it will copy `sub` since `best` and `sub` have the same abstract type.
+    AbstractDeps<allocator_type, allocator_type> deps2(deps.get_allocator(), deps.get_allocator());
+    best = deps2.template clone<best_type>(other.best);
+  }
 
   CUDA AType aty() const {
     return atype;
@@ -227,8 +233,8 @@ public:
    * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
    * It is safe to use `this.extract(*this)` to avoid allocating memory. */
-  template <class A2>
-  CUDA bool extract(BAB<A2>& ua) const {
+  template <class A2, class B2>
+  CUDA bool extract(BAB<A2, B2>& ua) const {
     if(solutions_found > 0 && sub->is_top())
     {
       ua.solutions_found = solutions_found;
@@ -241,7 +247,7 @@ public:
   }
 
   /** \pre `extract` must return `true`, otherwise it might not be an optimum. */
-  CUDA const A& optimum() const {
+  CUDA const best_type& optimum() const {
     return *best;
   }
 
