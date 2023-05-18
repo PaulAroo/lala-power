@@ -11,10 +11,10 @@
 
 namespace lala {
 
-template <class A, class B = A>
+template <class A, class B = A, class Allocator = typename A::allocator_type>
 class BAB {
 public:
-  using allocator_type = typename A::allocator_type;
+  using allocator_type = Allocator;
   using sub_type = A;
   using sub_ptr = battery::shared_ptr<A, allocator_type>;
   using best_type = B;
@@ -54,7 +54,7 @@ public:
 
   constexpr static const char* name = "BAB";
 
-  template <class A2, class B2>
+  template <class A2, class B2, class Alloc>
   friend class BAB;
 
 private:

@@ -36,13 +36,13 @@ enum class ValueOrder {
   // MIDDLE,
 };
 
-template <class A>
+template <class A, class Allocator = typename A::allocator_type>
 class SplitStrategy {
 public:
-  using allocator_type = typename A::allocator_type;
+  using allocator_type = Allocator;
   using sub_tell_type = typename A::tell_type<allocator_type>;
   using branch_type = Branch<sub_tell_type, allocator_type>;
-  using this_type = SplitStrategy<A>;
+  using this_type = SplitStrategy<A, allocator_type>;
   template <class>
   using snapshot_type = battery::tuple<int, int, int>;
 
@@ -74,7 +74,7 @@ public:
 
   constexpr static const char* name = "SplitStrategy";
 
-  template <class A2>
+  template <class A2, class Alloc2>
   friend class SplitStrategy;
 
 private:

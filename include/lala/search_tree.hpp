@@ -13,10 +13,10 @@
 
 namespace lala {
 
-template <class A>
+template <class A, class Allocator = typename A::allocator_type>
 class SearchTree {
 public:
-  using allocator_type = typename A::allocator_type;
+  using allocator_type = Allocator;
   using split_type = SplitStrategy<A>;
   using branch_type = typename split_type::branch_type;
   template <class Alloc>
@@ -51,7 +51,7 @@ public:
 
   constexpr static const char* name = "SearchTree";
 
-  template <class A2>
+  template <class A2, class Alloc2>
   friend class SearchTree;
 
 private:
@@ -71,7 +71,7 @@ private:
 public:
   CUDA SearchTree(AType uid, sub_ptr a, split_ptr split)
    : atype(uid), a(std::move(a)), split(std::move(split)),
-     stack(this->a->get_allocator()), root_tell(this->a->get_allocator())
+     stack(this->a.get_allocator()), root_tell(this->a.get_allocator())
   {}
 
   template<class A2, class FastAlloc>
