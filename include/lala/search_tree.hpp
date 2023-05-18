@@ -12,6 +12,17 @@
 #include "split_strategy.hpp"
 
 namespace lala {
+template <class A, class Allocator> class SearchTree;
+namespace impl {
+  template <class>
+  struct is_search_tree_like {
+    static constexpr bool value = false;
+  };
+  template<class A, class Alloc>
+  struct is_search_tree_like<SearchTree<A, Alloc>> {
+    static constexpr bool value = true;
+  };
+}
 
 template <class A, class Allocator = typename A::allocator_type>
 class SearchTree {
@@ -205,6 +216,27 @@ public:
         ua.root_tell.sub_tells.clear();
         ua.root_tell.split_tells.clear();
         return true;
+      }
+    }
+    return false;
+  }
+
+  /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
+   * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
+  template <class B>
+  CUDA bool extract(B& ua) const {
+    if(!is_top()) {
+      if constexpr(impl::is_search_tree_like<B>::value) {
+        assert(bool(ua.a));
+        if(a->extract(*ua.a)) {
+          ua.stack.clear();
+          ua.root_tell.sub_tells.clear();
+          ua.root_tell.split_tells.clear();
+          return true;
+        }
+      }
+      else {
+        return a->extract(ua);
       }
     }
     return false;

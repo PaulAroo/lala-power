@@ -10,16 +10,27 @@
 #include "lala/copy_dag_helper.hpp"
 
 namespace lala {
+template <class A, class B, class Alloc> class BAB;
+namespace impl {
+  template <class>
+  struct is_bab_like {
+    static constexpr bool value = false;
+  };
+  template<class A, class B, class Alloc>
+  struct is_bab_like<BAB<A, B, Alloc>> {
+    static constexpr bool value = true;
+  };
+}
 
 template <class A, class B = A, class Allocator = typename A::allocator_type>
 class BAB {
 public:
   using allocator_type = Allocator;
   using sub_type = A;
-  using sub_ptr = battery::shared_ptr<A, allocator_type>;
+  using sub_ptr = battery::shared_ptr<sub_type, allocator_type>;
   using best_type = B;
-  using best_ptr = battery::shared_ptr<B, allocator_type>;
-  using this_type = BAB<A, B>;
+  using best_ptr = battery::shared_ptr<best_type, allocator_type>;
+  using this_type = BAB<sub_type, best_type, allocator_type>;
 
   template <class Alloc2>
   struct tell_type {
@@ -54,7 +65,7 @@ public:
 
   constexpr static const char* name = "BAB";
 
-  template <class A2, class B2, class Alloc>
+  template <class A2, class B2, class Alloc2>
   friend class BAB;
 
 private:
@@ -66,25 +77,20 @@ private:
   int solutions_found;
 
 public:
-  CUDA BAB(AType atype, sub_ptr sub)
-   : atype(atype), sub(std::move(sub)), x(),
+  CUDA BAB(AType atype, sub_ptr sub, best_ptr best)
+   : atype(atype), sub(std::move(sub)), best(std::move(best)), x(),
      solutions_found(0)
   {
     assert(this->sub);
-    auto deps = AbstractDeps<allocator_type>(this->sub->get_allocator(), this->sub->get_allocator());
-    best = deps.template clone<best_type>(this->sub);
     assert(this->best);
   }
 
   template<class A2, class B2, class FastAlloc>
   CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
    : atype(other.atype), sub(deps.template clone<sub_type>(other.sub))
+   , best(deps.template clone<best_type>(other.best))
    , x(other.x), optimization_mode(other.optimization_mode)
-  {
-    // We declare `deps2` otherwise it will copy `sub` since `best` and `sub` have the same abstract type.
-    AbstractDeps<allocator_type, allocator_type> deps2(deps.get_allocator(), deps.get_allocator());
-    best = deps2.template clone<best_type>(other.best);
-  }
+  {}
 
   CUDA AType aty() const {
     return atype;
@@ -233,15 +239,20 @@ public:
    * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
    * It is safe to use `this.extract(*this)` to avoid allocating memory. */
-  template <class A2, class B2>
-  CUDA bool extract(BAB<A2, B2>& ua) const {
+  template <class AbstractBest>
+  CUDA bool extract(AbstractBest& ua) const {
     if(solutions_found > 0 && sub->is_top())
     {
-      ua.solutions_found = solutions_found;
-      best->extract(*(ua.best));
-      ua.x = x;
-      ua.optimization_mode = optimization_mode;
-      return true;
+      if constexpr(impl::is_bab_like<AbstractBest>::value) {
+        ua.solutions_found = solutions_found;
+        best->extract(*(ua.best));
+        ua.x = x;
+        ua.optimization_mode = optimization_mode;
+        return true;
+      }
+      else {
+        best->extract(ua);
+      }
     }
     return false;
   }

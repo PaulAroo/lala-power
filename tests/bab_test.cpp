@@ -5,7 +5,7 @@
 #include "helper.hpp"
 
 using ST = SearchTree<IStore>;
-using BAB_ = BAB<ST>;
+using BAB_ = BAB<ST, IStore>;
 
 template <class A>
 void check_solution(A& a, vector<Itv> solution) {
@@ -24,10 +24,13 @@ void test_unconstrained_bab(bool mode) {
   EXPECT_TRUE(f);
   // f->print(false);
   VarEnv<standard_allocator> env;
-  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  const size_t num_vars = 3;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), num_vars);
   auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
   auto search_tree = make_shared<ST, standard_allocator>(env.extends_abstract_dom(), store, split);
-  auto bab = BAB_(env.extends_abstract_dom(), search_tree);
+  // Best is a copy of the store, therefore it must have the same abstract type (in particular, when projecting the variable).
+  auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
+  auto bab = BAB_(env.extends_abstract_dom(), search_tree, best);
 
   EXPECT_TRUE(bab.is_bot());
   EXPECT_FALSE(bab.is_top());
@@ -53,7 +56,7 @@ void test_unconstrained_bab(bool mode) {
     search_tree->refine(has_changed);
   }
   // Find the optimum in the root node since they are no constraint...
-  check_solution(bab.optimum(), {Itv(0,2),Itv(0,2),Itv(0,2)});
+  check_solution(*best, {Itv(0,2),Itv(0,2),Itv(0,2)});
   // With a input-order smallest first strat, the fixed point is reached after 1 iteration.
   EXPECT_EQ(iterations, 1);
 
@@ -72,7 +75,7 @@ TEST(BABTest, UnconstrainedOptimization) {
 }
 
 using IST = SearchTree<IPC>;
-using IBAB = BAB<IST>;
+using IBAB = BAB<IST, IStore>;
 
 // Minimize is true, maximize is false.
 void test_constrained_bab(bool mode) {
@@ -84,11 +87,14 @@ void test_constrained_bab(bool mode) {
     std::string(mode ? "minimize" : "maximize") + " a[3];");
   EXPECT_TRUE(f);
   VarEnv<standard_allocator> env;
-  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
+  const size_t num_vars = 3;
+  auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), num_vars);
   auto ipc = make_shared<IPC, standard_allocator>(IPC(env.extends_abstract_dom(), store));
   auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
   auto search_tree = make_shared<IST, standard_allocator>(env.extends_abstract_dom(), ipc, split);
-  auto bab = IBAB(env.extends_abstract_dom(), search_tree);
+  // Best is a copy of the store, therefore it must have the same abstract type (in particular, when projecting the variable).
+  auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
+  auto bab = IBAB(env.extends_abstract_dom(), search_tree, best);
 
   auto bab_res = bab.interpret_tell_in(*f, env);
   // bab_res.print_diagnostics();
@@ -110,7 +116,7 @@ void test_constrained_bab(bool mode) {
   }
   EXPECT_TRUE(bab.is_top());
   if(mode) {
-    check_solution(bab.optimum(), {Itv(0,0),Itv(0,0),Itv(0,0)});
+    check_solution(*best, {Itv(0,0),Itv(0,0),Itv(0,0)});
     EXPECT_EQ(iterations, 5);
   }
   else {
