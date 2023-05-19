@@ -7,6 +7,7 @@
 #include "battery/shared_ptr.hpp"
 #include "branch.hpp"
 #include "lala/logic/logic.hpp"
+#include "lala/abstract_deps.hpp"
 
 namespace lala {
 
@@ -40,11 +41,36 @@ template <class A, class Allocator = typename A::allocator_type>
 class SplitStrategy {
 public:
   using allocator_type = Allocator;
-  using sub_tell_type = typename A::tell_type<allocator_type>;
+  using sub_type = A;
+  using sub_allocator_type = typename sub_type::allocator_type;
+  using sub_tell_type = typename sub_type::tell_type<allocator_type>;
   using branch_type = Branch<sub_tell_type, allocator_type>;
-  using this_type = SplitStrategy<A, allocator_type>;
-  template <class>
-  using snapshot_type = battery::tuple<int, int, int>;
+  using this_type = SplitStrategy<sub_type, allocator_type>;
+
+  template <class Alloc>
+  struct snapshot_type {
+    size_t num_strategies;
+    int current_strategy;
+    int next_unassigned_var;
+
+    CUDA snapshot_type(size_t num_strategies, int current_strategy, int next_unassigned_var)
+      : num_strategies(num_strategies)
+      , current_strategy(current_strategy)
+      , next_unassigned_var(next_unassigned_var)
+    {}
+
+    snapshot_type(const snapshot_type<Alloc>&) = default;
+    snapshot_type(snapshot_type<Alloc>&&) = default;
+    snapshot_type<Alloc>& operator=(snapshot_type<Alloc>&&) = default;
+    snapshot_type<Alloc>& operator=(const snapshot_type<Alloc>&) = default;
+
+    template<class Alloc2>
+    CUDA snapshot_type(const snapshot_type<Alloc2>& other, const Alloc&)
+      : num_strategies(other.num_strategies)
+      , current_strategy(other.current_strategy)
+      , next_unassigned_var(other.next_unassigned_var)
+    {}
+  };
 
   /** A split strategy consists of a variable order and value order on a subset of the variables. */
   template <class Alloc2>
@@ -58,6 +84,7 @@ public:
     : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
 
     strategy_type(const strategy_type<Alloc2>&) = default;
+    strategy_type(strategy_type<Alloc2>&&) = default;
 
     CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
       : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
@@ -83,7 +110,7 @@ private:
   using UB = typename universe_type::UB;
 
   AType atype;
-  battery::shared_ptr<A, allocator_type> a;
+  abstract_ptr<A> a;
   battery::vector<strategy_type<allocator_type>, allocator_type> strategies;
   int current_strategy;
   int next_unassigned_var;
@@ -160,14 +187,14 @@ private:
   }
 
 public:
-  CUDA SplitStrategy(AType atype, battery::shared_ptr<A, allocator_type> a):
+  CUDA SplitStrategy(AType atype, abstract_ptr<A> a):
     atype(atype), a(a), current_strategy(0), next_unassigned_var(0) {}
 
-  template<class A2, class FastAlloc>
-  CUDA SplitStrategy(const SplitStrategy<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
+  template<class A2, class... Allocators>
+  CUDA SplitStrategy(const SplitStrategy<A2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype),
      a(deps.template clone<A>(other.a)),
-     strategies(other.strategies, deps.get_allocator()),
+     strategies(other.strategies, deps.template get_allocator<allocator_type>()),
      current_strategy(other.current_strategy),
      next_unassigned_var(other.next_unassigned_var)
   {}
@@ -176,18 +203,22 @@ public:
     return atype;
   }
 
+  CUDA allocator_type get_allocator() const {
+    return strategies.get_allocator();
+  }
+
   template <class Alloc2 = allocator_type>
-  CUDA snapshot_type<Alloc2> snapshot() const {
-    return battery::make_tuple((int)strategies.size(), current_strategy, next_unassigned_var);
+  CUDA snapshot_type<Alloc2> snapshot(const Alloc2& alloc = Alloc2()) const {
+    return snapshot_type<Alloc2>{strategies.size(), current_strategy, next_unassigned_var};
   }
 
   template <class Alloc2 = allocator_type>
   CUDA void restore(const snapshot_type<Alloc2>& snap) {
-    while(strategies.size() > battery::get<0>(snap)) {
+    while(strategies.size() > snap.num_strategies) {
       strategies.pop_back();
     }
-    current_strategy = battery::get<1>(snap);
-    next_unassigned_var = battery::get<2>(snap);
+    current_strategy = snap.current_strategy;
+    next_unassigned_var = snap.next_unassigned_var;
   }
 
   /** This interpretation function expects `f` to be a predicate of the form `search(VariableOrder, ValueOrder, x_1, x_2, ..., x_n)`. */

@@ -7,7 +7,7 @@
 #include "battery/shared_ptr.hpp"
 #include "lala/logic/logic.hpp"
 #include "lala/universes/primitive_upset.hpp"
-#include "lala/copy_dag_helper.hpp"
+#include "lala/abstract_deps.hpp"
 
 #include "split_strategy.hpp"
 
@@ -28,15 +28,16 @@ template <class A, class Allocator = typename A::allocator_type>
 class SearchTree {
 public:
   using allocator_type = Allocator;
+  using sub_allocator_type = typename A::allocator_type;
   using split_type = SplitStrategy<A>;
   using branch_type = typename split_type::branch_type;
   template <class Alloc>
   using ask_type = typename A::ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
-  using sub_ptr = battery::shared_ptr<A, allocator_type>;
-  using split_ptr = battery::shared_ptr<split_type, allocator_type>;
-  using this_type = SearchTree<A>;
+  using sub_ptr = abstract_ptr<sub_type>;
+  using split_ptr = abstract_ptr<split_type>;
+  using this_type = SearchTree<sub_type, allocator_type>;
 
   template <class Alloc>
   struct tell_type {
@@ -47,8 +48,9 @@ public:
     tell_type(tell_type&&) = default;
 
     template <class SearchTreeTellType>
-    CUDA tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc()):
-      sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc) {}
+    CUDA tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc())
+      : sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc)
+    {}
 
     template <class Alloc2>
     friend class tell_type;
@@ -72,39 +74,41 @@ private:
   sub_ptr a;
   split_ptr split;
   battery::vector<branch_type, allocator_type> stack;
-  using root_type = battery::tuple<
-    typename sub_type::snapshot_type<allocator_type>,
-    typename split_type::snapshot_type<allocator_type>>;
+  using sub_snapshot_type = typename sub_type::snapshot_type<allocator_type>;
+  using split_snapshot_type = typename split_type::snapshot_type<allocator_type>;
+  using root_type = battery::tuple<sub_snapshot_type, split_snapshot_type>;
   root_type root;
   // Tell formulas (and strategies) to be added to root on backtracking.
   tell_type<allocator_type> root_tell;
 
 public:
-  CUDA SearchTree(AType uid, sub_ptr a, split_ptr split)
-   : atype(uid), a(std::move(a)), split(std::move(split)),
-     stack(this->a.get_allocator()), root_tell(this->a.get_allocator())
+  CUDA SearchTree(AType uid, sub_ptr a, split_ptr split, const allocator_type& alloc = allocator_type())
+   : atype(uid)
+   , a(std::move(a))
+   , split(std::move(split))
+   , stack(alloc)
+   , root(battery::make_tuple(this->a->snapshot(alloc), this->split->snapshot(alloc)))
+   , root_tell(alloc)
   {}
 
-  template<class A2, class FastAlloc>
-  CUDA SearchTree(const SearchTree<A2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
-   : atype(other.atype), a(deps.template clone<A>(other.a)), split(deps.template clone<split_type>(other.split)),
-    //  stack(other.stack),
-     stack(this->a->get_allocator()),
-     root(other.root),
-     root_tell(this->a->get_allocator())
-    //  root_tell(other.root_tell)
-  {
-    assert(other.stack.empty());
-    assert(other.root_tell.sub_tells.empty());
-    assert(other.root_tell.split_tells.empty());
-  }
+  template<class A2, class Alloc2, class... Allocators>
+  CUDA SearchTree(const SearchTree<A2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
+   : atype(other.atype)
+   , a(deps.template clone<sub_type>(other.a))
+   , split(deps.template clone<split_type>(other.split))
+   , stack(other.stack, deps.template get_allocator<allocator_type>())
+   , root(
+      sub_snapshot_type(battery::get<0>(other.root), deps.template get_allocator<allocator_type>()),
+      split_snapshot_type(battery::get<1>(other.root), deps.template get_allocator<allocator_type>()))
+   , root_tell(other.root_tell, deps.template get_allocator<allocator_type>())
+  {}
 
   CUDA AType aty() const {
     return atype;
   }
 
   CUDA allocator_type get_allocator() const {
-    return a->get_allocator();
+    return stack.get_allocator();
   }
 
   CUDA local::BDec is_singleton() const {
@@ -205,23 +209,6 @@ public:
   }
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
-   * The under-approximation consists in a search tree \f$ \{a\} \f$ with a single node.
-   * \pre `ua` must be different from `top`. */
-  template <class A2>
-  CUDA bool extract(SearchTree<A2>& ua) const {
-    if(!is_top()) {
-      assert(bool(ua.a));
-      if(a->extract(*ua.a)) {
-        ua.stack.clear();
-        ua.root_tell.sub_tells.clear();
-        ua.root_tell.split_tells.clear();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
    * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
   template <class B>
   CUDA bool extract(B& ua) const {
@@ -279,8 +266,8 @@ private:
     if(branch.size() > 0) {
       if(is_singleton()) {
         root = battery::make_tuple(
-          a->template snapshot<allocator_type>(),
-          split->template snapshot<allocator_type>());
+          a->snapshot(get_allocator()),
+          split->snapshot(get_allocator()));
       }
       stack.push_back(std::move(branch));
       return false;
@@ -350,8 +337,8 @@ private:
       root_tell.split_tells.clear();
       // A new snapshot is necessary since we modified `a` and `split`.
       root = battery::make_tuple(
-        a->template snapshot<allocator_type>(),
-        split->template snapshot<allocator_type>());
+        a->snapshot(get_allocator()),
+        split->snapshot(get_allocator()));
     }
   }
 

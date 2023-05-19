@@ -89,6 +89,6 @@ TEST(BranchTest, CopySplitStrategy) {
     make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 0);
   shared_ptr<SplitStrategy<IStore>> split =
     make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
-  AbstractDeps<standard_allocator> deps;
+  AbstractDeps<standard_allocator> deps{standard_allocator()};
   auto r = deps.template clone<SplitStrategy<AIStore>>(split);
 }

@@ -7,30 +7,30 @@
 #include "battery/shared_ptr.hpp"
 #include "lala/logic/logic.hpp"
 #include "lala/universes/primitive_upset.hpp"
-#include "lala/copy_dag_helper.hpp"
+#include "lala/abstract_deps.hpp"
 
 namespace lala {
-template <class A, class B, class Alloc> class BAB;
+template <class A, class B> class BAB;
 namespace impl {
   template <class>
   struct is_bab_like {
     static constexpr bool value = false;
   };
-  template<class A, class B, class Alloc>
-  struct is_bab_like<BAB<A, B, Alloc>> {
+  template<class A, class B>
+  struct is_bab_like<BAB<A, B>> {
     static constexpr bool value = true;
   };
 }
 
-template <class A, class B = A, class Allocator = typename A::allocator_type>
+template <class A, class B = A>
 class BAB {
 public:
-  using allocator_type = Allocator;
+  using allocator_type = typename A::allocator_type;
   using sub_type = A;
-  using sub_ptr = battery::shared_ptr<sub_type, allocator_type>;
+  using sub_ptr = abstract_ptr<sub_type>;
   using best_type = B;
-  using best_ptr = battery::shared_ptr<best_type, allocator_type>;
-  using this_type = BAB<sub_type, best_type, allocator_type>;
+  using best_ptr = abstract_ptr<best_type>;
+  using this_type = BAB<sub_type, best_type>;
 
   template <class Alloc2>
   struct tell_type {
@@ -65,7 +65,7 @@ public:
 
   constexpr static const char* name = "BAB";
 
-  template <class A2, class B2, class Alloc2>
+  template <class A2, class B2>
   friend class BAB;
 
 private:
@@ -85,11 +85,13 @@ public:
     assert(this->best);
   }
 
-  template<class A2, class B2, class FastAlloc>
-  CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<allocator_type, FastAlloc>& deps)
-   : atype(other.atype), sub(deps.template clone<sub_type>(other.sub))
+  template<class A2, class B2, class... Allocators>
+  CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<Allocators...>& deps)
+   : atype(other.atype)
+   , sub(deps.template clone<sub_type>(other.sub))
    , best(deps.template clone<best_type>(other.best))
-   , x(other.x), optimization_mode(other.optimization_mode)
+   , x(other.x)
+   , optimization_mode(other.optimization_mode)
   {}
 
   CUDA AType aty() const {

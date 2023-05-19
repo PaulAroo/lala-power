@@ -44,7 +44,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
   EXPECT_FALSE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  AbstractDeps<standard_allocator> deps;
+  AbstractDeps<standard_allocator> deps{standard_allocator{}};
   ST sol(search_tree, deps);
 
   int solutions = 0;
@@ -104,7 +104,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   search_tree.tell(st_res.value(), has_changed);
   EXPECT_TRUE(has_changed);
 
-  AbstractDeps<standard_allocator> deps;
+  AbstractDeps<standard_allocator> deps{standard_allocator{}};
   IST sol(search_tree, deps);
 
   int solutions = 0;
