@@ -12,24 +12,24 @@
 #include "split_strategy.hpp"
 
 namespace lala {
-template <class A, class Allocator> class SearchTree;
+template <class A, class S, class Allocator> class SearchTree;
 namespace impl {
   template <class>
   struct is_search_tree_like {
     static constexpr bool value = false;
   };
-  template<class A, class Alloc>
-  struct is_search_tree_like<SearchTree<A, Alloc>> {
+  template<class A, class S, class Alloc>
+  struct is_search_tree_like<SearchTree<A, S, Alloc>> {
     static constexpr bool value = true;
   };
 }
 
-template <class A, class Allocator = typename A::allocator_type>
+template <class A, class Split, class Allocator = typename A::allocator_type>
 class SearchTree {
 public:
   using allocator_type = Allocator;
   using sub_allocator_type = typename A::allocator_type;
-  using split_type = SplitStrategy<A>;
+  using split_type = Split;
   using branch_type = typename split_type::branch_type;
   template <class Alloc>
   using ask_type = typename A::ask_type<Alloc>;
@@ -37,7 +37,7 @@ public:
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
   using split_ptr = abstract_ptr<split_type>;
-  using this_type = SearchTree<sub_type, allocator_type>;
+  using this_type = SearchTree<sub_type, split_type, allocator_type>;
 
   template <class Alloc>
   struct tell_type {
@@ -64,7 +64,7 @@ public:
 
   constexpr static const char* name = "SearchTree";
 
-  template <class A2, class Alloc2>
+  template <class A2, class S2, class Alloc2>
   friend class SearchTree;
 
 private:
@@ -91,8 +91,8 @@ public:
    , root_tell(alloc)
   {}
 
-  template<class A2, class Alloc2, class... Allocators>
-  CUDA SearchTree(const SearchTree<A2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
+  template<class A2, class S2, class Alloc2, class... Allocators>
+  CUDA SearchTree(const SearchTree<A2, S2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
    , a(deps.template clone<sub_type>(other.a))
    , split(deps.template clone<split_type>(other.split))

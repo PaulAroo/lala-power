@@ -3,7 +3,7 @@
 #include "lala/search_tree.hpp"
 #include "helper.hpp"
 
-using ST = SearchTree<IStore>;
+using ST = SearchTree<IStore, SplitStrategy<IStore>>;
 
 template <class A>
 void check_solution(A& a, vector<int> solution) {
@@ -80,7 +80,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
   EXPECT_EQ(solutions, 3*3*3);
 }
 
-using IST = SearchTree<IPC>;
+using IST = SearchTree<IPC, SplitStrategy<IPC>>;
 
 TEST(SearchTreeTest, ConstrainedEnumeration) {
   FlatZincOutput<standard_allocator> output;

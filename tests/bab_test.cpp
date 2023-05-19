@@ -4,7 +4,7 @@
 #include "lala/bab.hpp"
 #include "helper.hpp"
 
-using ST = SearchTree<IStore>;
+using ST = SearchTree<IStore, SplitStrategy<IStore>>;
 using BAB_ = BAB<ST, IStore>;
 
 template <class A>
@@ -74,7 +74,7 @@ TEST(BABTest, UnconstrainedOptimization) {
   test_unconstrained_bab(false);
 }
 
-using IST = SearchTree<IPC>;
+using IST = SearchTree<IPC, SplitStrategy<IPC>>;
 using IBAB = BAB<IST, IStore>;
 
 // Minimize is true, maximize is false.
