@@ -187,8 +187,9 @@ private:
   }
 
 public:
-  CUDA SplitStrategy(AType atype, abstract_ptr<A> a):
-    atype(atype), a(a), current_strategy(0), next_unassigned_var(0) {}
+  CUDA SplitStrategy(AType atype, abstract_ptr<A> a, const allocator_type& alloc = allocator_type()):
+    atype(atype), a(a), current_strategy(0), next_unassigned_var(0), strategies(alloc)
+  {}
 
   template<class A2, class... Allocators>
   CUDA SplitStrategy(const SplitStrategy<A2>& other, AbstractDeps<Allocators...>& deps)
