@@ -64,8 +64,8 @@ public:
     snapshot_type<Alloc>& operator=(snapshot_type<Alloc>&&) = default;
     snapshot_type<Alloc>& operator=(const snapshot_type<Alloc>&) = default;
 
-    template<class Alloc2>
-    CUDA snapshot_type(const snapshot_type<Alloc2>& other, const Alloc&)
+    template<class SplitSnapshot, class Alloc2>
+    CUDA snapshot_type(const SplitSnapshot& other, const Alloc&)
       : num_strategies(other.num_strategies)
       , current_strategy(other.current_strategy)
       , next_unassigned_var(other.next_unassigned_var)
