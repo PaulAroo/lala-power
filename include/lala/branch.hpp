@@ -22,7 +22,7 @@ private:
   int current_idx;
 
 public:
-  CUDA Branch(): children(), current_idx(-1) {}
+  CUDA Branch(const allocator_type& alloc = allocator_type()): children(alloc), current_idx(-1) {}
   Branch(const Branch&) = default;
   Branch(Branch&&) = default;
   CUDA Branch(battery::vector<tell_type, allocator_type>&& children)

@@ -168,21 +168,21 @@ private:
   template <class U>
   CUDA branch_type make_branch(AVar x, Sig left_op, Sig right_op, const U& u) {
     if(u.is_top() && U::preserve_top || u.is_bot() && U::preserve_bot) {
-      return branch_type{};
+      return branch_type{get_allocator()};
     }
     using F = TFormula<allocator_type>;
     using branch_vector = battery::vector<sub_tell_type, allocator_type>;
     VarEnv<allocator_type> empty_env{};
     auto k = u.template deinterpret<F>();
-    auto left = a->interpret_tell_in(F::make_binary(F::make_avar(x), left_op, k, UNTYPED, a->get_allocator()), empty_env);
-    auto right = a->interpret_tell_in(F::make_binary(F::make_avar(x), right_op, k, UNTYPED, a->get_allocator()), empty_env);
+    auto left = a->interpret_tell_in(F::make_binary(F::make_avar(x), left_op, k, UNTYPED, get_allocator()), empty_env);
+    auto right = a->interpret_tell_in(F::make_binary(F::make_avar(x), right_op, k, UNTYPED, get_allocator()), empty_env);
     if(left.has_value() && right.has_value()) {
-      return Branch(branch_vector({std::move(left.value()), std::move(right.value())}, a->get_allocator()));
+      return Branch(branch_vector({std::move(left.value()), std::move(right.value())}, get_allocator()));
     }
     else {
       left.print_diagnostics();
       right.print_diagnostics();
-      return branch_type{};
+      return branch_type{get_allocator()};
     }
   }
 
@@ -301,7 +301,7 @@ public:
    This also means that you cannot suppose `split(a) = {}` to mean `a` is at `top`. */
   CUDA branch_type split() {
     if(a->is_top()) {
-      return branch_type{};
+      return branch_type{get_allocator()};
     }
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
@@ -312,11 +312,11 @@ public:
         case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());
         case ValueOrder::SPLIT: return make_branch(x, LEQ, GT, a->project(x).median().lb());
         case ValueOrder::REVERSE_SPLIT: return make_branch(x, GT, LEQ, a->project(x).median().lb());
-        default: printf("unsupported value order strategy\n"); assert(false); return branch_type{};
+        default: printf("unsupported value order strategy\n"); assert(false); return branch_type{get_allocator()};
       }
     }
     else {
-      return branch_type{};
+      return branch_type{get_allocator()};
     }
   }
 
