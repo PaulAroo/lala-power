@@ -64,7 +64,7 @@ public:
     snapshot_type<Alloc>& operator=(snapshot_type<Alloc>&&) = default;
     snapshot_type<Alloc>& operator=(const snapshot_type<Alloc>&) = default;
 
-    template<class SplitSnapshot, class Alloc2>
+    template<class SplitSnapshot>
     CUDA snapshot_type(const SplitSnapshot& other, const Alloc&)
       : num_strategies(other.num_strategies)
       , current_strategy(other.current_strategy)
@@ -191,8 +191,8 @@ public:
     atype(atype), a(a), current_strategy(0), next_unassigned_var(0), strategies(alloc)
   {}
 
-  template<class A2, class... Allocators>
-  CUDA SplitStrategy(const SplitStrategy<A2>& other, AbstractDeps<Allocators...>& deps)
+  template<class A2, class Alloc2, class... Allocators>
+  CUDA SplitStrategy(const SplitStrategy<A2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype),
      a(deps.template clone<A>(other.a)),
      strategies(other.strategies, deps.template get_allocator<allocator_type>()),
