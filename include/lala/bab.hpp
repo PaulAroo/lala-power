@@ -113,6 +113,9 @@ public:
 private:
   template <bool is_tell, class R, class SubR, class F, class Env>
   CUDA void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
+    if(!res.has_value()) {
+      return;
+    }
     if(sub_res.has_value()) {
       if constexpr(is_tell) {
         res.value().sub_tells.push_back(std::move(sub_res.value()));
@@ -168,6 +171,9 @@ private:
 
   template <class R, class F, class Env>
   CUDA void interpret_tell_in(R& res, const F& f, Env& env) {
+    if(!res.has_value()) {
+      return;
+    }
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && f.sig() == AND) {
         for(int i = 0; i < f.seq().size(); ++i) {
