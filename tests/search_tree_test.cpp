@@ -22,7 +22,7 @@ bool all_assigned(const IStore& a) {
 }
 
 TEST(SearchTreeTest, EnumerationSolution) {
-  FlatZincOutput<standard_allocator> output;
+  FlatZincOutput<standard_allocator> output(standard_allocator{});
   lala::impl::FlatZincParser<standard_allocator> parser(output);
   auto f = parser.parse("array[1..3] of var 0..2: a;\
     solve::int_search(a, input_order, indomain_min, complete) satisfy;");
@@ -83,7 +83,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
 using IST = SearchTree<IPC, SplitStrategy<IPC>>;
 
 TEST(SearchTreeTest, ConstrainedEnumeration) {
-  FlatZincOutput<standard_allocator> output;
+  FlatZincOutput<standard_allocator> output(standard_allocator{});
   lala::impl::FlatZincParser<standard_allocator> parser(output);
   auto f = parser.parse("array[1..3] of var 0..2: a;\
     constraint int_plus(a[1], a[2], a[3]);\

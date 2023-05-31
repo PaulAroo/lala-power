@@ -16,7 +16,7 @@ void check_solution(A& a, vector<Itv> solution) {
 
 // Minimize is true, maximize is false.
 void test_unconstrained_bab(bool mode) {
-  FlatZincOutput<standard_allocator> output;
+  FlatZincOutput<standard_allocator> output(standard_allocator{});
   lala::impl::FlatZincParser<standard_allocator> parser(output);
   auto f = parser.parse("array[1..3] of var 0..2: a;\
     solve::int_search(a, input_order, indomain_min, complete)" +
@@ -79,7 +79,7 @@ using IBAB = BAB<IST, IStore>;
 
 // Minimize is true, maximize is false.
 void test_constrained_bab(bool mode) {
-  FlatZincOutput<standard_allocator> output;
+  FlatZincOutput<standard_allocator> output(standard_allocator{});
   lala::impl::FlatZincParser<standard_allocator> parser(output);
   auto f = parser.parse("array[1..3] of var 0..2: a;\
     constraint int_plus(a[1], a[2], a[3]);\
