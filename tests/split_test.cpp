@@ -80,7 +80,7 @@ TEST(BranchTest, InputOrderTest) {
   test_strategy("largest", "indomain_reverse_split", 5, Itv(7, 10), Itv(2, 6));
 }
 
-using AItv = Interval<ZInc<int, battery::atomic_memory<standard_allocator>>>;
+using AItv = Interval<ZInc<int, battery::atomic_memory<>>>;
 using AIStore = VStore<AItv, standard_allocator>;
 
 TEST(BranchTest, CopySplitStrategy) {

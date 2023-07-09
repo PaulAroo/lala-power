@@ -1,87 +1,35 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.24)
+cmake_policy(SET CMP0135 NEW)
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES native)
+endif()
+
+project(lala-search
+  VERSION 1.0.0
+  HOMEPAGE_URL "https://github.com/lattice-land/lala-search"
+  LANGUAGES CUDA CXX)
+option(GPU "GPU" ON)
+option(LALA_SEARCH_BUILD_TESTS "LALA_SEARCH_BUILD_TESTS" OFF)
+
+# Dependencies
 
 include(FetchContent)
-include(CMakePrintHelpers)
-
-# Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
-# Fix found at https://github.com/ethereum/solidity/pull/13429
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
-  cmake_policy(SET CMP0135 NEW)
-endif()
-
-project(lala-search LANGUAGES CUDA CXX)
-option(GPU "GPU" ON)
-option(LALASEARCH_BUILD_TESTS "LALASEARCH_BUILD_TESTS" OFF)
-
-if(NOT DEFINED CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 20)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-endif()
-
-if(NOT DEFINED CMAKE_CUDA_STANDARD)
-    set(CMAKE_CUDA_STANDARD 20)
-    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-endif()
-
-# Cuda-battery dependency
-
-FetchContent_Declare(
-  cuda_battery
-  GIT_REPOSITORY "https://github.com/lattice-land/cuda-battery.git"
-  GIT_TAG        develop
-)
-FetchContent_MakeAvailable(cuda_battery)
-
-FetchContent_Declare(
-  lala_core
-  GIT_REPOSITORY "https://github.com/lattice-land/lala-core.git"
-  GIT_TAG        develop
-)
-FetchContent_MakeAvailable(lala_core)
-
-FetchContent_Declare(
-  lala_parsing
-  GIT_REPOSITORY "https://github.com/lattice-land/lala-parsing.git"
-  GIT_TAG        develop
-)
-FetchContent_MakeAvailable(lala_parsing)
 
 FetchContent_Declare(
   lala_pc
   GIT_REPOSITORY "https://github.com/lattice-land/lala-pc.git"
-  GIT_TAG        develop
+  GIT_TAG        main
 )
 FetchContent_MakeAvailable(lala_pc)
-
-# Thrust dependency
-
-FetchContent_Declare(
-  thrust
-  GIT_REPOSITORY "https://github.com/NVIDIA/thrust.git"
-  GIT_TAG        1.12.0
-)
-FetchContent_GetProperties(thrust)
-if(NOT thrust_POPULATED)
-    FetchContent_Populate(thrust)
-endif()
 
 # Preparing the library
 
 add_library(lala_search INTERFACE)
+target_link_libraries(lala_search INTERFACE lala_pc)
 target_include_directories(lala_search INTERFACE include)
 
-if(GPU)
-    set_property(TARGET lala_search PROPERTY CUDA_ARCHITECTURES 75)
-endif()
-
-target_compile_options(lala_search INTERFACE
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        --expt-relaxed-constexpr
-        $<$<CONFIG:Debug>:-G>>
-    $<$<CONFIG:Debug>:-g -DDEBUG>
-)
-
-if(LALASEARCH_BUILD_TESTS)
+if(LALA_SEARCH_BUILD_TESTS)
 
 # Google Test dependency
 
@@ -96,20 +44,22 @@ FetchContent_MakeAvailable(googletest)
 enable_testing()
 include(GoogleTest)
 
-add_executable(split_test tests/split_test.cpp)
-target_link_libraries(split_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
-target_include_directories(split_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
-gtest_discover_tests(split_test)
+FetchContent_Declare(
+  lala_parsing
+  GIT_REPOSITORY "https://github.com/lattice-land/lala-parsing.git"
+  GIT_TAG        main
+)
+FetchContent_MakeAvailable(lala_parsing)
 
-add_executable(search_tree_test tests/search_tree_test.cpp)
-target_link_libraries(search_tree_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
-target_include_directories(search_tree_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
-gtest_discover_tests(search_tree_test)
-
-add_executable(bab_test tests/bab_test.cpp)
-target_link_libraries(bab_test cuda_battery lala_core lala_parsing lala_pc lala_search gtest_main)
-target_include_directories(bab_test PRIVATE ${cuda_battery_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/include ${lala_core_SOURCE_DIR}/tests/include ${lala_pc_SOURCE_DIR}/include ${lala_parsing_SOURCE_DIR}/include ${thrust_SOURCE_DIR} ${cpp-peglib_SOURCE_DIR})
-gtest_discover_tests(bab_test)
+# I. CPU Tests (ending with "_test.cpp")
+file(GLOB cpu_test_files tests/*_test.cpp)
+foreach(file ${cpu_test_files})
+  cmake_path(GET file STEM test_name)
+  add_executable(${test_name} ${file})
+  target_link_libraries(${test_name} lala_parsing lala_search gtest_main)
+  target_include_directories(${test_name} PRIVATE "${lala-core_SOURCE_DIR}/tests/include")
+  gtest_discover_tests(${test_name})
+endforeach()
 
 endif()
 
@@ -117,28 +67,31 @@ endif()
 
 find_package(Doxygen REQUIRED doxygen)
 
-# Options based on those of Halide: https://github.com/halide/Halide/blob/feb81a2a0f7bc39cfa499e4e1a7dfedbc5250aaa/doc/CMakeLists.txt
-set(DOXYGEN_PROJECT_NAME "Abstract domains for search")
+set(DOXYGEN_PROJECT_NAME "Lattice land search library")
 set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
 set(DOXYGEN_CASE_SENSE_NAMES NO)
 set(DOXYGEN_CLASS_DIAGRAMS NO)
 set(DOXYGEN_DISTRIBUTE_GROUP_DOC YES)
 set(DOXYGEN_EXTRACT_ALL YES)
+set(DOXYGEN_EXTRACT_PRIVATE NO)
 set(DOXYGEN_FILE_PATTERNS *.hpp)
 set(DOXYGEN_GENERATE_TREEVIEW YES)
 set(DOXYGEN_HIDE_IN_BODY_DOCS YES)
 set(DOXYGEN_QUIET YES)
 set(DOXYGEN_RECURSIVE YES)
-set(DOXYGEN_REFERENCED_BY_RELATION YES)
-set(DOXYGEN_REFERENCES_RELATION YES)
 set(DOXYGEN_SORT_BY_SCOPE_NAME YES)
 set(DOXYGEN_SORT_MEMBER_DOCS NO)
 set(DOXYGEN_SOURCE_BROWSER NO)
 set(DOXYGEN_STRIP_CODE_COMMENTS NO)
 set(DOXYGEN_USE_MATHJAX YES)
 set(DOXYGEN_EXTRA_PACKAGES stmaryrd)
+set(DOXYGEN_EXCLUDE_SYMBOLS = impl)
+set(DOXYGEN_ENABLE_PREPROCESSING YES)
+set(DOXYGEN_PREDEFINED __NVCC__)
+set(DOXYGEN_REFERENCED_BY_RELATION NO)
+set(DOXYGEN_REFERENCES_RELATION NO)
 
-doxygen_add_docs(doc_lalasearch
+doxygen_add_docs(doc_lala_search
                  "include/"
                  ALL
                  COMMENT "Generate HTML documentation")
