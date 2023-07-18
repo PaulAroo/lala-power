@@ -8,6 +8,7 @@
 #include "lala/logic/logic.hpp"
 #include "lala/universes/primitive_upset.hpp"
 #include "lala/abstract_deps.hpp"
+#include "lala/vstore.hpp"
 
 namespace lala {
 template <class A, class B> class BAB;
@@ -220,9 +221,9 @@ public:
 
   /** \return `true` if the sub-domain is a solution (more precisely, an under-approximation) of the problem.
       The extracted under-approximation can be retreived by `optimum()`. */
-  template <class Mem>
-  CUDA bool refine(BInc<Mem>& has_changed) {
-    bool found_solution = sub->extract(*best);
+  template <class ExtractionStrategy = NonAtomicExtraction, class Mem>
+  CUDA bool refine(BInc<Mem>& has_changed, const ExtractionStrategy& strategy = ExtractionStrategy()) {
+    bool found_solution = sub->extract(*best, strategy);
     if(!x.is_untyped() && found_solution) {
       solutions_found++;
       Sig optimize_sig = is_minimization() ? LT : GT;
@@ -247,19 +248,19 @@ public:
    * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
    * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
    * It is safe to use `this.extract(*this)` to avoid allocating memory. */
-  template <class AbstractBest>
-  CUDA bool extract(AbstractBest& ua) const {
+  template <class ExtractionStrategy = NonAtomicExtraction, class AbstractBest>
+  CUDA bool extract(AbstractBest& ua, const ExtractionStrategy& strategy = ExtractionStrategy()) const {
     if(solutions_found > 0 && sub->is_top())
     {
       if constexpr(impl::is_bab_like<AbstractBest>::value) {
         ua.solutions_found = solutions_found;
-        best->extract(*(ua.best));
+        best->extract(*(ua.best), strategy);
         ua.x = x;
         ua.optimization_mode = optimization_mode;
         return true;
       }
       else {
-        best->extract(ua);
+        best->extract(ua, strategy);
       }
     }
     return false;
