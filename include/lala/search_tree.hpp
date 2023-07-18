@@ -8,6 +8,7 @@
 #include "lala/logic/logic.hpp"
 #include "lala/universes/primitive_upset.hpp"
 #include "lala/abstract_deps.hpp"
+#include "lala/vstore.hpp"
 
 #include "split_strategy.hpp"
 
@@ -210,12 +211,12 @@ public:
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
    * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
-  template <class B>
-  CUDA bool extract(B& ua) const {
+  template <class ExtractionStrategy = NonAtomicExtraction, class B>
+  CUDA bool extract(B& ua, const ExtractionStrategy& strategy = ExtractionStrategy()) const {
     if(!is_top()) {
       if constexpr(impl::is_search_tree_like<B>::value) {
         assert(bool(ua.a));
-        if(a->extract(*ua.a)) {
+        if(a->extract(*ua.a, strategy)) {
           ua.stack.clear();
           ua.root_tell.sub_tells.clear();
           ua.root_tell.split_tells.clear();
@@ -223,7 +224,7 @@ public:
         }
       }
       else {
-        return a->extract(ua);
+        return a->extract(ua, strategy);
       }
     }
     return false;
