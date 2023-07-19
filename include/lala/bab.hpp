@@ -86,14 +86,21 @@ public:
     assert(this->best);
   }
 
+  /** Construct BAB by copying `other`.
+   * The best solution is copied using a fresh AbstractDeps, and thus is not intended to be shared with other abstract domains.
+   * For instance, if `best` is a VStore, it shares the same AType than the VStore underlying `sub`.
+   * Hence, if we copy it using `deps`, both VStore will be shared which is not the intended behavior.
+   */
   template<class A2, class B2, class... Allocators>
   CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
    , sub(deps.template clone<sub_type>(other.sub))
-   , best(deps.template clone<best_type>(other.best))
    , x(other.x)
    , optimization_mode(other.optimization_mode)
-  {}
+  {
+    AbstractDeps<Allocators...> deps_best(deps.template get_allocator<Allocators>()...);
+    best = deps_best.template clone<best_type>(other.best);
+  }
 
   CUDA AType aty() const {
     return atype;
@@ -253,14 +260,18 @@ public:
     if(solutions_found > 0 && sub->is_top())
     {
       if constexpr(impl::is_bab_like<AbstractBest>::value) {
-        ua.solutions_found = solutions_found;
-        best->extract(*(ua.best), strategy);
-        ua.x = x;
-        ua.optimization_mode = optimization_mode;
-        return true;
+        if(best->extract(*(ua.best), strategy)) {
+          ua.solutions_found = solutions_found;
+          ua.x = x;
+          ua.optimization_mode = optimization_mode;
+          return true;
+        }
+        else {
+          return false;
+        }
       }
       else {
-        best->extract(ua, strategy);
+        return best->extract(ua, strategy);
       }
     }
     return false;
