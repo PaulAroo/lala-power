@@ -226,6 +226,21 @@ public:
     return *this;
   }
 
+  /** Update the variable to optimize `objective_var()` with a new bound. */
+  template <class Mem>
+  CUDA this_type& tell(const typename best_type::universe_type& best_bound, BInc<Mem>& has_changed) {
+    using F = TFormula<allocator_type>;
+    VarEnv<allocator_type> empty_env{};
+    Sig optimize_sig = is_minimization() ? LT : GT;
+    F constant = is_minimization()
+      ? best_bound.lb().template deinterpret<F>()
+      : best_bound.ub().template deinterpret<F>();
+    auto opti_fun = F::make_binary(F::make_avar(x), optimize_sig, constant, UNTYPED, get_allocator());
+    auto t = sub->interpret_tell_in(opti_fun, empty_env).value();
+    sub->tell(t, has_changed);
+    return *this;
+  }
+
   /** \return `true` if the sub-domain is a solution (more precisely, an under-approximation) of the problem.
       The extracted under-approximation can be retreived by `optimum()`. */
   template <class ExtractionStrategy = NonAtomicExtraction, class Mem>
@@ -233,16 +248,7 @@ public:
     bool found_solution = sub->extract(*best, strategy);
     if(!x.is_untyped() && found_solution) {
       solutions_found++;
-      Sig optimize_sig = is_minimization() ? LT : GT;
-      typename sub_type::universe_type k = is_minimization()
-        ? best->project(x).lb()
-        : best->project(x).ub();
-      using F = TFormula<allocator_type>;
-      VarEnv<allocator_type> empty_env{};
-      F constant = k.template deinterpret<F>();
-      auto opti_fun = F::make_binary(F::make_avar(x), optimize_sig, constant, UNTYPED, get_allocator());
-      auto t = sub->interpret_tell_in(opti_fun, empty_env).value();
-      sub->tell(t, has_changed);
+      tell(best->project(x), has_changed);
     }
     return found_solution;
   }
