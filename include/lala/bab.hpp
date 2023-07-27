@@ -232,6 +232,11 @@ public:
     using F = TFormula<allocator_type>;
     VarEnv<allocator_type> empty_env{};
     Sig optimize_sig = is_minimization() ? LT : GT;
+    if((is_minimization() && best_bound.lb().is_bot())
+      ||(is_maximization() && best_bound.ub().is_bot()))
+    {
+      return *this;
+    }
     F constant = is_minimization()
       ? best_bound.lb().template deinterpret<F>()
       : best_bound.ub().template deinterpret<F>();
@@ -286,6 +291,10 @@ public:
   /** \pre `extract` must return `true`, otherwise it might not be an optimum. */
   CUDA const best_type& optimum() const {
     return *best;
+  }
+
+  CUDA best_ptr optimum_ptr() const {
+    return best;
   }
 
   CUDA bool is_minimization() const {

@@ -47,6 +47,8 @@ public:
     CUDA tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
+    tell_type& operator=(tell_type&&) = default;
+    tell_type& operator=(const tell_type&) = default;
 
     template <class SearchTreeTellType>
     CUDA tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc())
@@ -123,6 +125,51 @@ public:
 
   CUDA local::BInc is_top() const {
     return !bool(a);
+  }
+
+  template <class Alloc2>
+  struct snapshot_type {
+    using sub_snap_type = typename sub_type::snapshot_type<Alloc2>;
+    using split_snap_type = typename split_type::snapshot_type<Alloc2>;
+    sub_snap_type sub_snap;
+    split_snap_type split_snap;
+    sub_ptr sub;
+
+    snapshot_type(const snapshot_type<Alloc2>&) = default;
+    snapshot_type(snapshot_type<Alloc2>&&) = default;
+    snapshot_type<Alloc2>& operator=(snapshot_type<Alloc2>&&) = default;
+    snapshot_type<Alloc2>& operator=(const snapshot_type<Alloc2>&) = default;
+
+    template <class SnapshotType>
+    CUDA snapshot_type(const SnapshotType& other, const Alloc2& alloc = Alloc2())
+      : sub_snap(other.sub_snap, alloc)
+      , split_snap(other.split_snap, alloc)
+      , sub(other.sub)
+    {}
+
+    CUDA snapshot_type(sub_snap_type&& sub_snap, split_snap_type&& split_snap, sub_ptr sub)
+      : sub_snap(std::move(sub_snap))
+      , split_snap(std::move(split_snap))
+      , sub(sub)
+    {}
+  };
+
+  template <class Alloc2 = allocator_type>
+  CUDA snapshot_type<Alloc2> snapshot(const Alloc2& alloc = Alloc2()) const {
+    assert(is_singleton());
+    return snapshot_type<Alloc2>(a->snapshot(alloc), split->snapshot(alloc), a);
+  }
+
+  template <class Alloc2>
+  CUDA void restore(const snapshot_type<Alloc2>& snap) {
+    a = snap.sub;
+    a->restore(snap.sub_snap);
+    split->restore(snap.split_snap);
+    stack.clear();
+    root = battery::make_tuple(
+      a->snapshot(get_allocator()),
+      split->snapshot(get_allocator()));
+    root_tell = tell_type<allocator_type>(get_allocator());
   }
 
 private:
