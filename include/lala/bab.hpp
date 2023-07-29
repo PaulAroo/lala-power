@@ -226,22 +226,32 @@ public:
     return *this;
   }
 
-  /** Update the variable to optimize `objective_var()` with a new bound. */
-  template <class Mem>
-  CUDA this_type& tell(const typename best_type::universe_type& best_bound, BInc<Mem>& has_changed) {
-    using F = TFormula<allocator_type>;
-    VarEnv<allocator_type> empty_env{};
+  template <class Alloc2>
+  CUDA TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2()) const {
+    using F = TFormula<Alloc2>;
     Sig optimize_sig = is_minimization() ? LT : GT;
     if((is_minimization() && best_bound.lb().is_bot())
       ||(is_maximization() && best_bound.ub().is_bot()))
     {
-      return *this;
+      return F::make_true();
     }
     F constant = is_minimization()
       ? best_bound.lb().template deinterpret<F>()
       : best_bound.ub().template deinterpret<F>();
-    auto opti_fun = F::make_binary(F::make_avar(x), optimize_sig, constant, UNTYPED, get_allocator());
-    auto t = sub->interpret_tell_in(opti_fun, empty_env).value();
+    return F::make_binary(F::make_avar(x), optimize_sig, constant, UNTYPED, alloc);
+  }
+
+  template <class Alloc2>
+  CUDA TFormula<Alloc2> deinterpret_best_bound(const Alloc2& alloc = Alloc2()) const {
+    return deinterpret_best_bound(best->project(x), alloc);
+  }
+
+  /** Update the variable to optimize `objective_var()` with a new bound. */
+  template <class Mem>
+  CUDA this_type& tell(const typename best_type::universe_type& best_bound, BInc<Mem>& has_changed) {
+    VarEnv<allocator_type> empty_env{};
+    auto bound_formula = deinterpret_best_bound(best_bound, get_allocator());
+    auto t = sub->interpret_tell_in(bound_formula, empty_env).value();
     sub->tell(t, has_changed);
     return *this;
   }

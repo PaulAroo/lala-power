@@ -41,6 +41,10 @@ public:
     return children[++current_idx];
   }
 
+  CUDA const tell_type& operator[](size_t idx) {
+    return children[idx];
+  }
+
   CUDA bool has_next() const {
     return current_idx + 1 < size();
   }
