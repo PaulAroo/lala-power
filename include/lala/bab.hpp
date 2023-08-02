@@ -42,11 +42,11 @@ public:
     tell_type() = default;
     tell_type(tell_type<Alloc2>&&) = default;
     tell_type(const tell_type<Alloc2>&) = default;
-    CUDA tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2()):
+    CUDA NI tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2()):
       x(x), optimization_mode(opt), sub_tells(alloc) {}
 
     template <class BABTellType>
-    CUDA tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2()):
+    CUDA NI tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2()):
       x(other.x), optimization_mode(other.optimization_mode),
       sub_tells(other.sub_tells, alloc)
     {}
@@ -92,7 +92,7 @@ public:
    * Hence, if we copy it using `deps`, both VStore will be shared which is not the intended behavior.
    */
   template<class A2, class B2, class... Allocators>
-  CUDA BAB(const BAB<A2, B2>& other, AbstractDeps<Allocators...>& deps)
+  CUDA NI BAB(const BAB<A2, B2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
    , sub(deps.template clone<sub_type>(other.sub))
    , x(other.x)
@@ -120,7 +120,7 @@ public:
 
 private:
   template <bool is_tell, class R, class SubR, class F, class Env>
-  CUDA void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
+  CUDA NI void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
     if(!res.has_value()) {
       return;
     }
@@ -139,7 +139,7 @@ private:
   }
 
   template <bool is_tell, class R, class F, class Env>
-  CUDA void interpret_sub(R& res, const F& f, Env& env) {
+  CUDA NI void interpret_sub(R& res, const F& f, Env& env) {
     if constexpr(is_tell){
       auto sub_res = sub->interpret_tell_in(f, env);
       interpret_sub<is_tell>(res, sub_res, f, env);
@@ -151,7 +151,7 @@ private:
   }
 
   template <class F, class Env>
-  CUDA void interpret_optimization_predicate(iresult_tell<F, Env>& res, const F& f, Env& env) {
+  CUDA NI void interpret_optimization_predicate(iresult_tell<F, Env>& res, const F& f, Env& env) {
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
         res.value().optimization_mode = f.sig() == MINIMIZE;
@@ -178,7 +178,7 @@ private:
   }
 
   template <class R, class F, class Env>
-  CUDA void interpret_tell_in(R& res, const F& f, Env& env) {
+  CUDA NI void interpret_tell_in(R& res, const F& f, Env& env) {
     if(!res.has_value()) {
       return;
     }
@@ -199,14 +199,14 @@ private:
 
 public:
   template <class F, class Env>
-  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     iresult_tell<F, Env> res(tell_type<typename Env::allocator_type>{});
     interpret_tell_in(res, f, env);
     return std::move(res);
   }
 
   template <class F, class Env>
-  CUDA iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
+  CUDA NI iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
     iresult_ask<F, Env> res{env.get_allocator()};
     interpret_sub<false>(res, f, env);
     return std::move(res);
@@ -227,7 +227,7 @@ public:
   }
 
   template <class Alloc2>
-  CUDA TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2()) const {
+  CUDA NI TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2()) const {
     using F = TFormula<Alloc2>;
     Sig optimize_sig = is_minimization() ? LT : GT;
     if((is_minimization() && best_bound.lb().is_bot())

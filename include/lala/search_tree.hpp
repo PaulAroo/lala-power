@@ -44,14 +44,14 @@ public:
   struct tell_type {
     battery::vector<typename A::tell_type<Alloc>, Alloc> sub_tells;
     battery::vector<typename split_type::tell_type<Alloc>, Alloc> split_tells;
-    CUDA tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
+    CUDA NI tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
     tell_type& operator=(tell_type&&) = default;
     tell_type& operator=(const tell_type&) = default;
 
     template <class SearchTreeTellType>
-    CUDA tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc())
+    CUDA NI tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc())
       : sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc)
     {}
 
@@ -95,7 +95,7 @@ public:
   {}
 
   template<class A2, class S2, class Alloc2, class... Allocators>
-  CUDA SearchTree(const SearchTree<A2, S2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
+  CUDA NI SearchTree(const SearchTree<A2, S2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
    , a(deps.template clone<sub_type>(other.a))
    , split(deps.template clone<split_type>(other.split))
@@ -174,7 +174,7 @@ public:
 
 private:
   template <class F, class Env>
-  CUDA void interpret_tell_in(const F& f, Env& env, iresult_tell<F, Env>& res) {
+  CUDA NI void interpret_tell_in(const F& f, Env& env, iresult_tell<F, Env>& res) {
     if(f.is(F::Seq) && f.sig() == AND) {
       for(int i = 0; res.has_value() && i < f.seq().size(); ++i) {
         interpret_tell_in(f.seq(i), env, res);
@@ -202,7 +202,7 @@ private:
 
 public:
   template <class F, class Env>
-  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(is_top()) {
       return iresult_tell<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
     }
@@ -212,7 +212,7 @@ public:
   }
 
   template <class F, class Env>
-  CUDA iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
+  CUDA NI iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
     return a->interpret_ask_in(f, env);
   }
 

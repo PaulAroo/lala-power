@@ -119,7 +119,7 @@ private:
     return strategies[current_strategy].vars;
   }
 
-  CUDA void move_to_next_unassigned_var() {
+  CUDA NI void move_to_next_unassigned_var() {
     while(current_strategy < strategies.size()) {
       const auto& vars = current_vars();
       while(next_unassigned_var < vars.size()) {
@@ -135,7 +135,7 @@ private:
   }
 
   template <class MapFunction>
-  CUDA AVar var_map_fold_left(const battery::vector<AVar, allocator_type>& vars, MapFunction op) {
+  CUDA NI AVar var_map_fold_left(const battery::vector<AVar, allocator_type>& vars, MapFunction op) {
     int i = next_unassigned_var;
     int best_i = i;
     auto best = op(a->project(vars[i]));
@@ -166,7 +166,7 @@ private:
   }
 
   template <class U>
-  CUDA branch_type make_branch(AVar x, Sig left_op, Sig right_op, const U& u) {
+  CUDA NI branch_type make_branch(AVar x, Sig left_op, Sig right_op, const U& u) {
     if(u.is_top() && U::preserve_top || u.is_bot() && U::preserve_bot) {
       return branch_type{get_allocator()};
     }
@@ -224,7 +224,7 @@ public:
 
   /** This interpretation function expects `f` to be a predicate of the form `search(VariableOrder, ValueOrder, x_1, x_2, ..., x_n)`. */
   template <class F, class Env>
-  CUDA iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(!(f.is(F::ESeq)
       && f.eseq().size() >= 3
       && f.esig() == "search"
@@ -299,7 +299,7 @@ public:
 
    If the next unassigned variable cannot be split, for instance because the value ordering strategy maps to `bot` or `top`, an empty set of branches is returned.
    This also means that you cannot suppose `split(a) = {}` to mean `a` is at `top`. */
-  CUDA branch_type split() {
+  CUDA NI branch_type split() {
     if(a->is_top()) {
       return branch_type{get_allocator()};
     }
