@@ -43,7 +43,7 @@ public:
   using allocator_type = Allocator;
   using sub_type = A;
   using sub_allocator_type = typename sub_type::allocator_type;
-  using sub_tell_type = typename sub_type::tell_type<allocator_type>;
+  using sub_tell_type = sub_type::template tell_type<allocator_type>;
   using branch_type = Branch<sub_tell_type, allocator_type>;
   using this_type = SplitStrategy<sub_type, allocator_type>;
 

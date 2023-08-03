@@ -33,7 +33,7 @@ public:
   using split_type = Split;
   using branch_type = typename split_type::branch_type;
   template <class Alloc>
-  using ask_type = typename A::ask_type<Alloc>;
+  using ask_type = A::template ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
@@ -42,8 +42,8 @@ public:
 
   template <class Alloc>
   struct tell_type {
-    battery::vector<typename A::tell_type<Alloc>, Alloc> sub_tells;
-    battery::vector<typename split_type::tell_type<Alloc>, Alloc> split_tells;
+    battery::vector<typename A::template tell_type<Alloc>, Alloc> sub_tells;
+    battery::vector<typename split_type::template tell_type<Alloc>, Alloc> split_tells;
     CUDA NI tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
@@ -63,7 +63,7 @@ public:
   using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
 
   template<class F, class Env>
-  using iresult_ask = IResult<typename A::ask_type<typename Env::allocator_type>, F>;
+  using iresult_ask = IResult<typename A::template ask_type<typename Env::allocator_type>, F>;
 
   constexpr static const char* name = "SearchTree";
 
@@ -77,8 +77,8 @@ private:
   sub_ptr a;
   split_ptr split;
   battery::vector<branch_type, allocator_type> stack;
-  using sub_snapshot_type = typename sub_type::snapshot_type<allocator_type>;
-  using split_snapshot_type = typename split_type::snapshot_type<allocator_type>;
+  using sub_snapshot_type = sub_type::template snapshot_type<allocator_type>;
+  using split_snapshot_type = split_type::template snapshot_type<allocator_type>;
   using root_type = battery::tuple<sub_snapshot_type, split_snapshot_type>;
   root_type root;
   // Tell formulas (and strategies) to be added to root on backtracking.
@@ -129,8 +129,8 @@ public:
 
   template <class Alloc2>
   struct snapshot_type {
-    using sub_snap_type = typename sub_type::snapshot_type<Alloc2>;
-    using split_snap_type = typename split_type::snapshot_type<Alloc2>;
+    using sub_snap_type = sub_type::template snapshot_type<Alloc2>;
+    using split_snap_type = split_type::template snapshot_type<Alloc2>;
     sub_snap_type sub_snap;
     split_snap_type split_snap;
     sub_ptr sub;

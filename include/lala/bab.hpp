@@ -35,7 +35,7 @@ public:
 
   template <class Alloc2>
   struct tell_type {
-    using sub_tell_type = typename sub_type::tell_type<Alloc2>;
+    using sub_tell_type = sub_type::template tell_type<Alloc2>;
     AVar x;
     bool optimization_mode;
     battery::vector<sub_tell_type, Alloc2> sub_tells;
@@ -56,7 +56,7 @@ public:
   };
 
   template <class Alloc2>
-  using ask_type = battery::vector<typename sub_type::ask_type<Alloc2>, Alloc2>;
+  using ask_type = battery::vector<typename sub_type::template ask_type<Alloc2>, Alloc2>;
 
   template<class F, class Env>
   using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
