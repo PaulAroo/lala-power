@@ -167,19 +167,23 @@ private:
 
   template <class U>
   CUDA NI branch_type make_branch(AVar x, Sig left_op, Sig right_op, const U& u) {
-    if(u.is_top() && U::preserve_top || u.is_bot() && U::preserve_bot) {
+    if((u.is_top() && U::preserve_top) || (u.is_bot() && U::preserve_bot)) {
+      if(u.is_bot()) {
+        printf("%% WARNING: Cannot currently branch on unbounded variables.\n");
+      }
       return branch_type{get_allocator()};
     }
     using F = TFormula<allocator_type>;
     using branch_vector = battery::vector<sub_tell_type, allocator_type>;
     VarEnv<allocator_type> empty_env{};
     auto k = u.template deinterpret<F>();
-    auto left = a->interpret_tell_in(F::make_binary(F::make_avar(x), left_op, k, UNTYPED, get_allocator()), empty_env);
-    auto right = a->interpret_tell_in(F::make_binary(F::make_avar(x), right_op, k, UNTYPED, get_allocator()), empty_env);
+    auto left = a->interpret_tell_in(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env);
+    auto right = a->interpret_tell_in(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env);
     if(left.has_value() && right.has_value()) {
       return Branch(branch_vector({std::move(left.value()), std::move(right.value())}, get_allocator()));
     }
     else {
+      printf("%% WARNING: The subdomain does not support the underlying search strategy.\n");
       left.print_diagnostics();
       right.print_diagnostics();
       return branch_type{get_allocator()};

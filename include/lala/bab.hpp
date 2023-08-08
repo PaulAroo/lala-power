@@ -229,12 +229,12 @@ public:
   template <class Alloc2>
   CUDA NI TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2()) const {
     using F = TFormula<Alloc2>;
-    Sig optimize_sig = is_minimization() ? LT : GT;
     if((is_minimization() && best_bound.lb().is_bot())
       ||(is_maximization() && best_bound.ub().is_bot()))
     {
       return F::make_true();
     }
+    Sig optimize_sig = is_minimization() ? LT : GT;
     F constant = is_minimization()
       ? best_bound.lb().template deinterpret<F>()
       : best_bound.ub().template deinterpret<F>();

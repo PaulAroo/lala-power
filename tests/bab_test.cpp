@@ -55,10 +55,10 @@ void test_unconstrained_bab(bool mode) {
     bab.refine(has_changed);
     search_tree->refine(has_changed);
   }
-  // Find the optimum in the root node since they are no constraint...
-  check_solution(*best, {Itv(0,2),Itv(0,2),Itv(0,2)});
   // With a input-order smallest first strat, the fixed point is reached after 1 iteration.
   EXPECT_EQ(iterations, 1);
+  // Find the optimum in the root node since they are no constraint...
+  check_solution(*best, {Itv(0,2),Itv(0,2),Itv(0,2)});
 
   EXPECT_TRUE(search_tree->is_top());
 
