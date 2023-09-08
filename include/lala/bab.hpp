@@ -1,7 +1,7 @@
 // Copyright 2022 Pierre Talbot
 
-#ifndef BAB_HPP
-#define BAB_HPP
+#ifndef LALA_POWER_BAB_HPP
+#define LALA_POWER_BAB_HPP
 
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"

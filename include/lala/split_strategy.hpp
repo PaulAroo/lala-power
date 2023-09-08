@@ -1,7 +1,7 @@
 // Copyright 2023 Pierre Talbot
 
-#ifndef SPLIT_STRATEGY_HPP
-#define SPLIT_STRATEGY_HPP
+#ifndef LALA_POWER_SPLIT_STRATEGY_HPP
+#define LALA_POWER_SPLIT_STRATEGY_HPP
 
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"

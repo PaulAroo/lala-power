@@ -1,7 +1,7 @@
 // Copyright 2022 Pierre Talbot
 
-#ifndef SEARCH_TREE_HPP
-#define SEARCH_TREE_HPP
+#ifndef LALA_POWER_SEARCH_TREE_HPP
+#define LALA_POWER_SEARCH_TREE_HPP
 
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"

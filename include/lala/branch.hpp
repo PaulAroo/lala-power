@@ -1,7 +1,7 @@
 // Copyright 2022 Pierre Talbot
 
-#ifndef BRANCH_HPP
-#define BRANCH_HPP
+#ifndef LALA_POWER_BRANCH_HPP
+#define LALA_POWER_BRANCH_HPP
 
 #include "battery/vector.hpp"
 #include "lala/logic/logic.hpp"

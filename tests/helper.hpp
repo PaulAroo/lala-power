@@ -1,7 +1,7 @@
 // Copyright 2022 Pierre Talbot
 
-#ifndef HELPER_HPP
-#define HELPER_HPP
+#ifndef LALA_POWER_HELPER_HPP
+#define LALA_POWER_HELPER_HPP
 
 #include <gtest/gtest.h>
 #include <gtest/gtest-spi.h>
