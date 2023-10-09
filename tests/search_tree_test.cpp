@@ -58,7 +58,8 @@ TEST(SearchTreeTest, EnumerationSolution) {
           EXPECT_TRUE(has_changed);
         } while(!all_assigned(*store));
         // There is no constraint so we are always navigating the under-approximated space.
-        EXPECT_TRUE(search_tree.extract(sol));
+        EXPECT_TRUE(search_tree.is_extractable());
+        search_tree.extract(sol);
         // All variables are supposed to be assigned if nothing changed.
         check_solution(sol, {x1, x2, x3});
         solutions++;
@@ -121,7 +122,8 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
     ++iterations;
     has_changed = false;
     GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
-    if(all_assigned(*store) && search_tree.extract(sol)) {
+    if(all_assigned(*store) && search_tree.is_extractable()) {
+      search_tree.extract(sol);
       check_solution(sol, sols[solutions++]);
     }
     search_tree.refine(has_changed);

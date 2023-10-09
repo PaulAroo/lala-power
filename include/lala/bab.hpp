@@ -256,49 +256,65 @@ public:
     return *this;
   }
 
-  /** \return `true` if the sub-domain is a solution (more precisely, an under-approximation) of the problem.
-      The extracted under-approximation can be retreived by `optimum()`. */
-  template <class ExtractionStrategy = NonAtomicExtraction, class Mem>
-  CUDA bool refine(BInc<Mem>& has_changed, const ExtractionStrategy& strategy = ExtractionStrategy()) {
-    bool found_solution = sub->extract(*best, strategy);
-    if(!x.is_untyped() && found_solution) {
+  /** Compare the best bound of two stores on the objective variable represented in this BAB abstract element.
+   * \return `true` if `store1` is strictly better than `store2`, false otherwise.
+  */
+  template <class Store1, class Store2>
+  CUDA bool compare_bound(const Store1& store1, const Store2& store2) const {
+    const auto& bound1 = store1.project(x);
+    const auto& bound2 = store2.project(x);
+    using LB = typename Store1::universe_type::LB;
+    using UB = typename Store1::universe_type::UB;
+    // When minimizing, the best bound is getting smaller and smaller, hence the order over LB is not suited, we must compare the bound in UB which represents this fact.
+    // And dually for maximization.
+    if(is_minimization()) {
+      return dual<UB>(bound1.lb()) > dual<UB>(bound2.lb());
+    }
+    else {
+      return dual<LB>(bound1.ub()) > dual<LB>(bound2.ub());
+    }
+  }
+
+  /** This refinement operator performs "branch-and-bound" by adding a constraint to the root node of the search tree to ensure the next solution is better than the current one, and store the best solution found.
+   * \pre The current subelement must be extractable, and have a better bound than `best` (this is not checked here).
+   * Beware this refinement operator is not idempotent (it must only be called once on each new solution).
+   */
+  template <class Mem>
+  CUDA void refine(BInc<Mem>& has_changed) {
+    if(!x.is_untyped()) {
+      sub->extract(*best);
       solutions_found++;
       tell(best->project(x), has_changed);
     }
-    return found_solution;
   }
 
   CUDA int solutions_count() const {
     return solutions_found;
   }
 
-  /** An under-approximation is reached when the underlying abstract element `sub` is equal to `top`.
-   * We consider that `top` implies we have completely explored `sub`, and we can't find better bounds.
-   * As this abstract element cannot further refine `best`, it is shared with the under-approximation.
-   * It is safe to use `this.extract(*this)` to avoid allocating memory. */
-  template <class ExtractionStrategy = NonAtomicExtraction, class AbstractBest>
-  CUDA bool extract(AbstractBest& ua, const ExtractionStrategy& strategy = ExtractionStrategy()) const {
-    if(solutions_found > 0 && sub->is_top())
-    {
-      if constexpr(impl::is_bab_like<AbstractBest>::value) {
-        if(best->extract(*(ua.best), strategy)) {
-          ua.solutions_found = solutions_found;
-          ua.x = x;
-          ua.optimization_mode = optimization_mode;
-          return true;
-        }
-        else {
-          return false;
-        }
-      }
-      else {
-        return best->extract(ua, strategy);
-      }
-    }
-    return false;
+  /** Given an optimization problem, it is extractable only when we have explored the whole state space (indicated by the subdomain being equal to top), we have found one solution, and that solution is extractable. */
+  template <class ExtractionStrategy = NonAtomicExtraction>
+  CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
+    return solutions_found > 0 && sub->is_top() && best->is_extractable(strategy);
   }
 
-  /** \pre `extract` must return `true`, otherwise it might not be an optimum. */
+  /** Extract the best solution found in `ua`.
+   * \pre `is_extractable()` must return `true`. */
+  template <class AbstractBest>
+  CUDA void extract(AbstractBest& ua) const {
+    if constexpr(impl::is_bab_like<AbstractBest>::value) {
+      best->extract(*(ua.best));
+      ua.solutions_found = solutions_found;
+      ua.x = x;
+      ua.optimization_mode = optimization_mode;
+    }
+    else {
+      return best->extract(ua);
+    }
+  }
+
+  /** If `is_extractable()` is not `true`, the returned element might not be an optimum, and should be seen as the best optimum found so far.
+  */
   CUDA const best_type& optimum() const {
     return *best;
   }

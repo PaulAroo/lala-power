@@ -256,25 +256,25 @@ public:
     pop(push(split->split()), has_changed);
   }
 
+  template <class ExtractionStrategy = NonAtomicExtraction>
+  CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
+    return !is_top() && a->is_extractable(strategy);
+  }
+
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
    * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
-  template <class ExtractionStrategy = NonAtomicExtraction, class B>
-  CUDA bool extract(B& ua, const ExtractionStrategy& strategy = ExtractionStrategy()) const {
-    if(!is_top()) {
-      if constexpr(impl::is_search_tree_like<B>::value) {
-        assert(bool(ua.a));
-        if(a->extract(*ua.a, strategy)) {
-          ua.stack.clear();
-          ua.root_tell.sub_tells.clear();
-          ua.root_tell.split_tells.clear();
-          return true;
-        }
-      }
-      else {
-        return a->extract(ua, strategy);
-      }
+  template <class B>
+  CUDA void extract(B& ua) const {
+    if constexpr(impl::is_search_tree_like<B>::value) {
+      assert(bool(ua.a));
+      a->extract(*ua.a);
+      ua.stack.clear();
+      ua.root_tell.sub_tells.clear();
+      ua.root_tell.split_tells.clear();
     }
-    return false;
+    else {
+      a->extract(ua);
+    }
   }
 
   /** If the search tree is empty (\f$ \top \f$), we return \f$ \top_U \f$.

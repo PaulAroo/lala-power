@@ -48,11 +48,13 @@ void test_unconstrained_bab(bool mode) {
   // Find solution optimizing a[3].
   int iterations = 0;
   has_changed = true;
-  while(!bab.extract(bab) && has_changed) {
+  while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \f$.
-    bab.refine(has_changed);
+    if(search_tree->is_extractable()) {
+      bab.refine(has_changed);
+    }
     search_tree->refine(has_changed);
   }
   // With a input-order smallest first strat, the fixed point is reached after 1 iteration.
@@ -64,7 +66,6 @@ void test_unconstrained_bab(bool mode) {
 
   // One more iteration to check idempotency.
   has_changed = false;
-  bab.refine(has_changed);
   search_tree->refine(has_changed);
   EXPECT_FALSE(has_changed);
 }
@@ -106,12 +107,14 @@ void test_constrained_bab(bool mode) {
   // Find solution optimizing a[3].
   has_changed = true;
   int iterations = 0;
-  while(!bab.extract(bab) && has_changed) {
+  while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
     GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
-    bab.refine(has_changed);
+    if(search_tree->is_extractable()) {
+      bab.refine(has_changed);
+    }
     search_tree->refine(has_changed);
   }
   EXPECT_TRUE(bab.is_top());
@@ -129,7 +132,6 @@ void test_constrained_bab(bool mode) {
   // One more iteration to check idempotency.
   has_changed = false;
   GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
-  bab.refine(has_changed);
   search_tree->refine(has_changed);
   EXPECT_FALSE(has_changed);
 }

@@ -182,6 +182,11 @@ private:
     if(left.has_value() && right.has_value()) {
       return Branch(branch_vector({std::move(left.value()), std::move(right.value())}, get_allocator()));
     }
+    // Fallback on a more standard split search strategy.
+    // We don't print anything because it might interfere with the output (without lock).
+    else if(left_op != LEQ || right_op != GT) {
+      return make_branch(x, LEQ, GT, u);
+    }
     else {
       printf("%% WARNING: The subdomain does not support the underlying search strategy.\n");
       left.print_diagnostics();
