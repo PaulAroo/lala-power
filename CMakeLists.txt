@@ -9,7 +9,7 @@ project(lala-power
   HOMEPAGE_URL "https://github.com/lattice-land/lala-power"
   LANGUAGES CUDA CXX)
 option(GPU "GPU" ON)
-option(LOCAL_DEPS "LOCAL_DEPS" ON)
+option(LOCAL_DEPS "LOCAL_DEPS" OFF)
 option(LALA_POWER_BUILD_TESTS "LALA_POWER_BUILD_TESTS" OFF)
 
 # Dependencies

@@ -280,10 +280,12 @@ public:
       else if(f.eseq(i).is(F::V)) {
         vars.push_back(f.eseq(i).v());
       }
-      else {
+      else if(num_vars(f.eseq(i)) > 0) {
         return iresult_tell<F, Env>(
-          IError<F>(true, name, "A non-variable expression is passed to the predicate `search` after the variable and value order strategies.", f.eseq(i)));
+          IError<F>(true, name, "The predicate `search` only supports variables or constants, but an expression containing a variable was passed to it.", f.eseq(i)));
       }
+      // Ignore constant expressions.
+      else {}
     }
     return iresult_tell<F, Env>(
       tell_type<typename Env::allocator_type>(var_order, val_order, std::move(vars)));

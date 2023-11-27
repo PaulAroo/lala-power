@@ -281,8 +281,8 @@ public:
    */
   template <class Mem>
   CUDA void refine(BInc<Mem>& has_changed) {
+    sub->extract(*best);
     if(!x.is_untyped()) {
-      sub->extract(*best);
       solutions_found++;
       tell(best->project(x), has_changed);
     }
