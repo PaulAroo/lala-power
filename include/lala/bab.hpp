@@ -154,8 +154,8 @@ private:
   CUDA NI void interpret_optimization_predicate(iresult_tell<F, Env>& res, const F& f, Env& env) {
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
-        res.value().optimization_mode = f.sig() == MINIMIZE;
         if(f.seq(0).is_variable()) {
+          res.value().optimization_mode = f.sig() == MINIMIZE;
           auto var_res = env.interpret(f.seq(0));
           if(var_res.has_value()) {
             res.value().x = var_res.value();
@@ -163,6 +163,11 @@ private:
           else {
             res.join_errors(std::move(var_res));
           }
+        }
+        // If the objective variable is already fixed to a constant, we ignore this predicate.
+        // If there is only one objective, it becomes a satisfaction problem.
+        else if(num_vars(f.seq(0)) == 0) {
+          return;
         }
         else {
           res = iresult_tell<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize. Instead, you can create a new variable with the expression to optimize.", f));
@@ -257,10 +262,12 @@ public:
   }
 
   /** Compare the best bound of two stores on the objective variable represented in this BAB abstract element.
+   * \pre `is_optimization()` must be `true`.
    * \return `true` if `store1` is strictly better than `store2`, false otherwise.
   */
   template <class Store1, class Store2>
   CUDA bool compare_bound(const Store1& store1, const Store2& store2) const {
+    assert(is_optimization());
     const auto& bound1 = store1.project(x);
     const auto& bound2 = store2.project(x);
     using LB = typename Store1::universe_type::LB;
@@ -276,14 +283,14 @@ public:
   }
 
   /** This refinement operator performs "branch-and-bound" by adding a constraint to the root node of the search tree to ensure the next solution is better than the current one, and store the best solution found.
-   * \pre The current subelement must be extractable, and have a better bound than `best` (this is not checked here).
+   * \pre The current subelement must be extractable, and if it is an optimization problem, have a better bound than `best` (this is not checked here).
    * Beware this refinement operator is not idempotent (it must only be called once on each new solution).
    */
   template <class Mem>
   CUDA void refine(BInc<Mem>& has_changed) {
     sub->extract(*best);
-    if(!x.is_untyped()) {
-      solutions_found++;
+    solutions_found++;
+    if(is_optimization()) {
       tell(best->project(x), has_changed);
     }
   }
@@ -323,12 +330,20 @@ public:
     return best;
   }
 
+  CUDA bool is_satisfaction() const {
+    return x.is_untyped();
+  }
+
+  CUDA bool is_optimization() const {
+    return !is_satisfaction();
+  }
+
   CUDA bool is_minimization() const {
-    return optimization_mode;
+    return is_optimization() && optimization_mode;
   }
 
   CUDA bool is_maximization() const {
-    return !optimization_mode;
+    return is_optimization() && !optimization_mode;
   }
 
   CUDA AVar objective_var() const {

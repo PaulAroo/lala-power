@@ -235,7 +235,7 @@ public:
   template <class F, class Env>
   CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
     if(!(f.is(F::ESeq)
-      && f.eseq().size() >= 3
+      && f.eseq().size() >= 2
       && f.esig() == "search"
       && f.eseq()[0].is(F::ESeq) && f.eseq()[0].eseq().size() == 0
       && f.eseq()[1].is(F::ESeq) && f.eseq()[1].eseq().size() == 0))
