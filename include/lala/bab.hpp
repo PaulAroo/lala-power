@@ -120,7 +120,7 @@ public:
 
 private:
   template <bool is_tell, class R, class SubR, class F, class Env>
-  CUDA NI void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
+  CUDA void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
     if(!res.has_value()) {
       return;
     }
@@ -139,7 +139,7 @@ private:
   }
 
   template <bool is_tell, class R, class F, class Env>
-  CUDA NI void interpret_sub(R& res, const F& f, Env& env) {
+  CUDA void interpret_sub(R& res, const F& f, Env& env) {
     if constexpr(is_tell){
       auto sub_res = sub->interpret_tell_in(f, env);
       interpret_sub<is_tell>(res, sub_res, f, env);
@@ -189,7 +189,7 @@ private:
     }
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && f.sig() == AND) {
-        for(int i = 0; i < f.seq().size(); ++i) {
+        for(int i = 0; i < f.seq().size() && res.has_value(); ++i) {
           interpret_tell_in(res, f.seq(i), env);
         }
       }
