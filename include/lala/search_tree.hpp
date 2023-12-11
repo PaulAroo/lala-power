@@ -33,7 +33,7 @@ public:
   using split_type = Split;
   using branch_type = typename split_type::branch_type;
   template <class Alloc>
-  using ask_type = A::template ask_type<Alloc>;
+  using ask_type = typename A::template ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
@@ -42,28 +42,30 @@ public:
 
   template <class Alloc>
   struct tell_type {
-    battery::vector<typename A::template tell_type<Alloc>, Alloc> sub_tells;
-    battery::vector<typename split_type::template tell_type<Alloc>, Alloc> split_tells;
-    CUDA NI tell_type(const Alloc& alloc): sub_tells(alloc), split_tells(alloc) {}
+    typename A::template tell_type<Alloc> sub_tell;
+    typename split_type::template tell_type<Alloc> split_tell;
+    CUDA NI tell_type(const Alloc& alloc): sub_tell(alloc), split_tell(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
     tell_type& operator=(tell_type&&) = default;
     tell_type& operator=(const tell_type&) = default;
 
     template <class SearchTreeTellType>
-    CUDA NI tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc())
-      : sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc)
+    CUDA NI tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc{})
+      : sub_tell(other.sub_tell, alloc), split_tell(other.split_tell, alloc)
     {}
+
+    using allocator_type = Alloc;
+    CUDA allocator_type get_allocator() const {
+      return sub_tell.get_allocator();
+    }
 
     template <class Alloc2>
     friend class tell_type;
   };
 
-  template<class F, class Env>
-  using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
-
-  template<class F, class Env>
-  using iresult_ask = IResult<typename A::template ask_type<typename Env::allocator_type>, F>;
+  template<class Alloc>
+  using ask_type = typename A::template ask_type<Alloc>;
 
   constexpr static const char* name = "SearchTree";
 
@@ -81,8 +83,17 @@ private:
   using split_snapshot_type = split_type::template snapshot_type<allocator_type>;
   using root_type = battery::tuple<sub_snapshot_type, split_snapshot_type>;
   root_type root;
+
   // Tell formulas (and strategies) to be added to root on backtracking.
-  tell_type<allocator_type> root_tell;
+  struct root_tell_type {
+    battery::vector<typename A::template tell_type<allocator_type>, allocator_type> sub_tells;
+    battery::vector<typename split_type::template tell_type<allocator_type>, allocator_type> split_tells;
+    CUDA root_tell_type(const allocator_type& alloc): sub_tells(alloc), split_tells(alloc) {}
+    template <class RootTellType>
+    CUDA root_tell_type(const RootTellType& other, const allocator_type& alloc)
+     : sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc) {}
+  };
+  root_tell_type root_tell;
 
 public:
   CUDA SearchTree(AType uid, sub_ptr a, split_ptr split, const allocator_type& alloc = allocator_type())
@@ -169,62 +180,42 @@ public:
     root = battery::make_tuple(
       a->snapshot(get_allocator()),
       split->snapshot(get_allocator()));
-    root_tell = tell_type<allocator_type>(get_allocator());
-  }
-
-private:
-  template <class F, class Env>
-  CUDA NI void interpret_tell_in(const F& f, Env& env, iresult_tell<F, Env>& res) {
-    if(f.is(F::Seq) && f.sig() == AND) {
-      for(int i = 0; res.has_value() && i < f.seq().size(); ++i) {
-        interpret_tell_in(f.seq(i), env, res);
-      }
-    }
-    else if(f.is(F::ESeq) && f.esig() == "search") {
-      auto split_res = split->interpret_tell_in(f, env);
-      if(split_res.has_value()) {
-        res.value().split_tells.push_back(std::move(split_res.value()));
-      }
-      else {
-        res = iresult_tell<F, Env>(std::move(split_res.error()));
-      }
-    }
-    else {
-      auto r = a->interpret_tell_in(f, env);
-      if(r.has_value()) {
-        res.value().sub_tells.push_back(std::move(r.value()));
-      }
-      else {
-        res = iresult_tell<F, Env>(std::move(r.error()));
-      }
-    }
+    root_tell = root_tell_type{get_allocator()};
   }
 
 public:
-  template <class F, class Env>
-  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
-    if(is_top()) {
-      return iresult_tell<F, Env>(IError<F>(true, name, "The current abstract element is `top`.", f));
+  template <bool diagnose = false, class F, class Env, class Alloc2>
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
+    assert(!is_top());
+    if(f.is(F::ESeq) && f.esig() == "search") {
+      return split->template interpret_tell<diagnose>(f, env, tell.split_tell, diagnostics);
     }
-    iresult_tell<F, Env> res(tell_type<allocator_type>(env.get_allocator()));
-    interpret_tell_in(f, env, res);
-    return res;
+    else {
+      return a->template interpret_tell<diagnose>(f, env, tell.sub_tell, diagnostics);
+    }
   }
 
-  template <class F, class Env>
-  CUDA NI iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
-    return a->interpret_ask_in(f, env);
+  template <bool diagnose = false, class F, class Env, class Alloc2>
+  CUDA NI bool interpret_ask(const F& f, Env& env, ask_type<Alloc2>& ask, IDiagnostics<F>& diagnostics) const {
+    assert(!is_top());
+    return a->template interpret_ask<diagnose>(f, env, ask, diagnostics);
+  }
+
+  template <IKind kind, bool diagnose = false, class F, class Env, class I>
+  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics<F>& diagnostics) const {
+    if constexpr(kind == IKind::Tell) {
+      return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
+    }
+    else {
+      return interpret_ask<diagnose>(f, env, intermediate, diagnostics);
+    }
   }
 
 private:
   template <class Alloc, class Mem>
   CUDA void tell_current(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    for(int i = 0; i < t.sub_tells.size(); ++i) {
-      a->tell(t.sub_tells[i], has_changed);
-    }
-    for(int i = 0; i < t.split_tells.size(); ++i) {
-      split->tell(t.split_tells[i], has_changed);
-    }
+    a->tell(t.sub_tell, has_changed);
+    split->tell(t.split_tell, has_changed);
   }
 
 public:
@@ -233,12 +224,8 @@ public:
     if(!is_top()) {
       if(!is_singleton()) {
         // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
-        for(int i = 0; i < t.sub_tells.size(); ++i) {
-          root_tell.sub_tells.push_back(t.sub_tells[i]);
-        }
-        for(int i = 0; i < t.split_tells.size(); ++i) {
-          root_tell.split_tells.push_back(t.split_tells[i]);
-        }
+        root_tell.sub_tells.push_back(t.sub_tell);
+        root_tell.split_tells.push_back(t.split_tell);
       }
       // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
       tell_current(t, has_changed);

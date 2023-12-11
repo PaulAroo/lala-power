@@ -38,31 +38,30 @@ public:
     using sub_tell_type = sub_type::template tell_type<Alloc2>;
     AVar x;
     bool optimization_mode;
-    battery::vector<sub_tell_type, Alloc2> sub_tells;
+    sub_tell_type sub_tell;
     tell_type() = default;
     tell_type(tell_type<Alloc2>&&) = default;
     tell_type(const tell_type<Alloc2>&) = default;
-    CUDA NI tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2()):
-      x(x), optimization_mode(opt), sub_tells(alloc) {}
+    CUDA NI tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2{}):
+      x(x), optimization_mode(opt), sub_tell(alloc) {}
 
     template <class BABTellType>
-    CUDA NI tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2()):
+    CUDA NI tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2{}):
       x(other.x), optimization_mode(other.optimization_mode),
-      sub_tells(other.sub_tells, alloc)
+      sub_tell(other.sub_tell, alloc)
     {}
+
+    using allocator_type = Alloc2;
+    CUDA allocator_type get_allocator() const {
+      return sub_tell.get_allocator();
+    }
 
     template <class Alloc3>
     friend struct tell_type;
   };
 
   template <class Alloc2>
-  using ask_type = battery::vector<typename sub_type::template ask_type<Alloc2>, Alloc2>;
-
-  template<class F, class Env>
-  using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
-
-  template<class F, class Env>
-  using iresult_ask = IResult<ask_type<typename Env::allocator_type>, F>;
+  using ask_type = typename sub_type::template ask_type<Alloc2>;
 
   constexpr static const char* name = "BAB";
 
@@ -118,110 +117,54 @@ public:
     return x.is_untyped() && sub->is_bot();
   }
 
-private:
-  template <bool is_tell, class R, class SubR, class F, class Env>
-  CUDA void interpret_sub(R& res, SubR& sub_res, const F& f, Env& env) {
-    if(!res.has_value()) {
-      return;
-    }
-    if(sub_res.has_value()) {
-      if constexpr(is_tell) {
-        res.value().sub_tells.push_back(std::move(sub_res.value()));
-      }
-      else {
-        res.value().push_back(std::move(sub_res.value()));
-      }
-      res.join_warnings(std::move(sub_res));
-    }
-    else {
-      res.join_errors(std::move(sub_res));
-    }
-  }
-
-  template <bool is_tell, class R, class F, class Env>
-  CUDA void interpret_sub(R& res, const F& f, Env& env) {
-    if constexpr(is_tell){
-      auto sub_res = sub->interpret_tell_in(f, env);
-      interpret_sub<is_tell>(res, sub_res, f, env);
-    }
-    else {
-      auto sub_res = sub->interpret_ask_in(f, env);
-      interpret_sub<is_tell>(res, sub_res, f, env);
-    }
-  }
-
-  template <class F, class Env>
-  CUDA NI void interpret_optimization_predicate(iresult_tell<F, Env>& res, const F& f, Env& env) {
+public:
+  template <bool diagnose = false, class F, class Env, class Alloc2>
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
         if(f.seq(0).is_variable()) {
-          res.value().optimization_mode = f.sig() == MINIMIZE;
-          auto var_res = env.interpret(f.seq(0));
-          if(var_res.has_value()) {
-            res.value().x = var_res.value();
+          if(env.interpret(f.seq(0), tell.x, diagnostics)) {
+            tell.optimization_mode = f.sig() == MINIMIZE;
+            return true;
           }
           else {
-            res.join_errors(std::move(var_res));
+            return false;
           }
         }
         // If the objective variable is already fixed to a constant, we ignore this predicate.
         // If there is only one objective, it becomes a satisfaction problem.
         else if(num_vars(f.seq(0)) == 0) {
-          return;
+          RETURN_INTERPRETATION_WARNING("This objective is already fixed to a constant, thus it is ignored.");
         }
         else {
-          res = iresult_tell<F, Env>(IError<F>(true, name, "Optimization predicates expect a variable to optimize. Instead, you can create a new variable with the expression to optimize.", f));
+          RETURN_INTERPRETATION_ERROR("Optimization predicates expect a variable to optimize (not an expression). Instead, you can create a new variable with the expression to optimize.");
         }
-        return;
       }
       else if(f.type() == aty()) {
-        res = iresult_tell<F, Env>(IError<F>(true, name, "Unsupported formula.", f));
-        return;
+        RETURN_INTERPRETATION_ERROR("This formula has the type of BAB but it is not supported in this abstract domain.");
       }
     }
-    interpret_sub<true>(res, f, env);
+    return sub->template interpret_tell<diagnose>(f, env, tell.sub_tell, diagnostics);
   }
 
-  template <class R, class F, class Env>
-  CUDA NI void interpret_tell_in(R& res, const F& f, Env& env) {
-    if(!res.has_value()) {
-      return;
-    }
-    if(f.is_untyped() || f.type() == aty()) {
-      if(f.is(F::Seq) && f.sig() == AND) {
-        for(int i = 0; i < f.seq().size() && res.has_value(); ++i) {
-          interpret_tell_in(res, f.seq(i), env);
-        }
-      }
-      else {
-        interpret_optimization_predicate(res, f, env);
-      }
+  template <bool diagnose = false, class F, class Env, class Alloc2>
+  CUDA NI bool interpret_ask(const F& f, const Env& env, ask_type<Alloc2>& ask, IDiagnostics<F>& diagnostics) const {
+    return sub->template interpret_ask<diagnose>(f, env, ask, diagnostics);
+  }
+
+  template <IKind kind, bool diagnose = false, class F, class Env, class I>
+  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics<F>& diagnostics) const {
+    if constexpr(kind == IKind::TELL) {
+      return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
     }
     else {
-      interpret_sub<true>(res, f, env);
+      return interpret_ask<diagnose>(f, env, intermediate, diagnostics);
     }
-  }
-
-public:
-  template <class F, class Env>
-  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
-    iresult_tell<F, Env> res(tell_type<typename Env::allocator_type>{});
-    interpret_tell_in(res, f, env);
-    return std::move(res);
-  }
-
-  template <class F, class Env>
-  CUDA NI iresult_ask<F, Env> interpret_ask_in(const F& f, Env& env) {
-    iresult_ask<F, Env> res{env.get_allocator()};
-    interpret_sub<false>(res, f, env);
-    return std::move(res);
   }
 
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    for(int i = 0; i < t.sub_tells.size(); ++i) {
-      sub->tell(t.sub_tells[i], has_changed);
-    }
+    sub->tell(t.sub_tell, has_changed);
     if(!t.x.is_untyped()) {
       assert(x.is_untyped()); // multi-objective optimization not yet supported.
       x = t.x;
@@ -232,7 +175,7 @@ public:
   }
 
   template <class Alloc2>
-  CUDA NI TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2()) const {
+  CUDA NI TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2{}) const {
     using F = TFormula<Alloc2>;
     if((is_minimization() && best_bound.lb().is_bot())
       ||(is_maximization() && best_bound.ub().is_bot()))
@@ -247,7 +190,7 @@ public:
   }
 
   template <class Alloc2>
-  CUDA TFormula<Alloc2> deinterpret_best_bound(const Alloc2& alloc = Alloc2()) const {
+  CUDA TFormula<Alloc2> deinterpret_best_bound(const Alloc2& alloc = Alloc2{}) const {
     return deinterpret_best_bound(best->project(x), alloc);
   }
 
@@ -255,8 +198,12 @@ public:
   template <class Mem>
   CUDA this_type& tell(const typename best_type::universe_type& best_bound, BInc<Mem>& has_changed) {
     VarEnv<allocator_type> empty_env{};
-    auto bound_formula = deinterpret_best_bound(best_bound, get_allocator());
-    auto t = sub->interpret_tell_in(bound_formula, empty_env).value();
+    using F = TFormula<allocator_type>;
+    F bound_formula = deinterpret_best_bound(best_bound, get_allocator());
+    IDiagnostics<F> diagnostics;
+    typename sub_type::template tell_type<allocator_type> t;
+    bool res = sub->interpret_tell(bound_formula, empty_env, t, diagnostics);
+    assert(res);
     sub->tell(t, has_changed);
     return *this;
   }

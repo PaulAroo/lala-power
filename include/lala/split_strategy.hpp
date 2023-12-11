@@ -83,21 +83,24 @@ public:
     CUDA strategy_type(const StrategyType& other, const Alloc2& alloc = Alloc2())
     : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
 
+    strategy_type(const Alloc2& alloc = Alloc2{}): var_order(VariableOrder::INPUT_ORDER), val_order(ValueOrder::MIN), vars(alloc) {}
     strategy_type(const strategy_type<Alloc2>&) = default;
     strategy_type(strategy_type<Alloc2>&&) = default;
 
     CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
       : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
 
+    using allocator_type = Alloc2;
+    CUDA allocator_type get_allocator() const {
+      return vars.get_allocator();
+    }
+
     template <class Alloc3>
     friend class strategy_type;
   };
 
   template <class Alloc2>
-  using tell_type = strategy_type<Alloc2>;
-
-  template<class F, class Env>
-  using iresult_tell = IResult<tell_type<typename Env::allocator_type>, F>;
+  using tell_type = battery::vector<strategy_type<Alloc2>, Alloc2>;
 
   constexpr static const char* name = "SplitStrategy";
 
@@ -161,7 +164,7 @@ private:
       case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual<LB>(u.width().ub()); });
       case VariableOrder::LARGEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual<LB>(u.ub()); });
       case VariableOrder::SMALLEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual<UB>(u.lb()); });
-      default: printf("unsupported variable order strategy\n"); assert(false); return AVar{};
+      default: printf("BUG: unsupported variable order strategy\n"); assert(false); return AVar{};
     }
   }
 
@@ -177,10 +180,13 @@ private:
     using branch_vector = battery::vector<sub_tell_type, allocator_type>;
     VarEnv<allocator_type> empty_env{};
     auto k = u.template deinterpret<F>();
-    auto left = a->interpret_tell_in(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env);
-    auto right = a->interpret_tell_in(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env);
-    if(left.has_value() && right.has_value()) {
-      return Branch(branch_vector({std::move(left.value()), std::move(right.value())}, get_allocator()));
+    IDiagnostics<F> diagnostics;
+    sub_tell_type left{get_allocator()};
+    sub_tell_type right{get_allocator()};
+    bool res = a->interpret_tell(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env, left, diagnostics);
+    res &= a->interpret_tell(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env, right, diagnostics);
+    if(res) {
+      return Branch(branch_vector({std::move(left), std::move(right)}, get_allocator()));
     }
     // Fallback on a more standard split search strategy.
     // We don't print anything because it might interfere with the output (without lock).
@@ -232,75 +238,72 @@ public:
   }
 
   /** This interpretation function expects `f` to be a predicate of the form `search(VariableOrder, ValueOrder, x_1, x_2, ..., x_n)`. */
-  template <class F, class Env>
-  CUDA NI iresult_tell<F, Env> interpret_tell_in(const F& f, Env& env) {
+  template <bool diagnose = false, class F, class Env, class Alloc2>
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
     if(!(f.is(F::ESeq)
       && f.eseq().size() >= 2
       && f.esig() == "search"
       && f.eseq()[0].is(F::ESeq) && f.eseq()[0].eseq().size() == 0
       && f.eseq()[1].is(F::ESeq) && f.eseq()[1].eseq().size() == 0))
     {
-      return iresult_tell<F, Env>(
-        IError<F>(true, name,
-          "We only interpret predicate of the form `search(input_order, indomain_min, x1, ..., xN)`.", f));
+      RETURN_INTERPRETATION_ERROR("SplitStrategy can only interpret predicates of the form `search(input_order, indomain_min, x1, ..., xN)`.");
     }
-    VariableOrder var_order;
-    ValueOrder val_order;
+    strategy_type<Alloc2> strat{tell.get_allocator()};
     const auto& var_order_str = f.eseq()[0].esig();
     const auto& val_order_str = f.eseq()[1].esig();
-    if(var_order_str == "input_order") { var_order = VariableOrder::INPUT_ORDER; }
-    else if(var_order_str == "first_fail") { var_order = VariableOrder::FIRST_FAIL; }
-    else if(var_order_str == "anti_first_fail") { var_order = VariableOrder::ANTI_FIRST_FAIL; }
-    else if(var_order_str == "smallest") { var_order = VariableOrder::SMALLEST; }
-    else if(var_order_str == "largest") { var_order = VariableOrder::LARGEST; }
+    if(var_order_str == "input_order") { strat.var_order = VariableOrder::INPUT_ORDER; }
+    else if(var_order_str == "first_fail") { strat.var_order = VariableOrder::FIRST_FAIL; }
+    else if(var_order_str == "anti_first_fail") { strat.var_order = VariableOrder::ANTI_FIRST_FAIL; }
+    else if(var_order_str == "smallest") { strat.var_order = VariableOrder::SMALLEST; }
+    else if(var_order_str == "largest") { strat.var_order = VariableOrder::LARGEST; }
     else {
-      return iresult_tell<F, Env>(
-        IError<F>(true, name, "This variable order strategy is unsupported.", f));
+      RETURN_INTERPRETATION_ERROR("This variable order strategy is unsupported.");
     }
-    if(val_order_str == "indomain_min") { val_order = ValueOrder::MIN; }
-    else if(val_order_str == "indomain_max") { val_order = ValueOrder::MAX; }
-    else if(val_order_str == "indomain_median") { val_order = ValueOrder::MEDIAN; }
-    else if(val_order_str == "indomain_split") { val_order = ValueOrder::SPLIT; }
-    else if(val_order_str == "indomain_reverse_split") { val_order = ValueOrder::REVERSE_SPLIT; }
+    if(val_order_str == "indomain_min") { strat.val_order = ValueOrder::MIN; }
+    else if(val_order_str == "indomain_max") { strat.val_order = ValueOrder::MAX; }
+    else if(val_order_str == "indomain_median") { strat.val_order = ValueOrder::MEDIAN; }
+    else if(val_order_str == "indomain_split") { strat.val_order = ValueOrder::SPLIT; }
+    else if(val_order_str == "indomain_reverse_split") { strat.val_order = ValueOrder::REVERSE_SPLIT; }
     else {
-      return iresult_tell<F, Env>(
-        IError<F>(true, name, "This value order strategy is unsupported.", f));
+      RETURN_INTERPRETATION_ERROR("This value order strategy is unsupported.");
     }
-    battery::vector<AVar, typename Env::allocator_type> vars;
     for(int i = 2; i < f.eseq().size(); ++i) {
       if(f.eseq(i).is(F::LV)) {
-        auto res_var = env.interpret(f.eseq(i));
-        if(res_var.has_value()) {
-          vars.push_back(res_var.value());
-        }
-        else {
-          return std::move(res_var.error());
+        strat.vars.push_back(AVar{});
+        if(!env.interpret(f.eseq(i), strat.vars.back(), diagnostics)) {
+          return false;
         }
       }
       else if(f.eseq(i).is(F::V)) {
-        vars.push_back(f.eseq(i).v());
+        strat.vars.push_back(f.eseq(i).v());
       }
       else if(num_vars(f.eseq(i)) > 0) {
-        return iresult_tell<F, Env>(
-          IError<F>(true, name, "The predicate `search` only supports variables or constants, but an expression containing a variable was passed to it.", f.eseq(i)));
+        RETURN_INTERPRETATION_ERROR("The predicate `search` only supports variables or constants, but an expression containing a variable was passed to it.");
       }
       // Ignore constant expressions.
       else {}
     }
-    return iresult_tell<F, Env>(
-      tell_type<typename Env::allocator_type>(var_order, val_order, std::move(vars)));
+    if(strat.vars.size() == 0) {
+      RETURN_INTERPRETATION_WARNING("The predicate `search` has no variable, and thus it is ignored.");
+    }
+    tell.push_back(std::move(strat));
+    return true;
   }
 
   template <class Alloc2>
   CUDA this_type& tell(const tell_type<Alloc2>& t) {
-    strategies.push_back(t);
+    for(int i = 0; i < t.size(); ++i) {
+      strategies.push_back(t[i]);
+    }
     return *this;
   }
 
   /** Calling this function multiple times will create multiple strategies, that will be called in sequence along a branch of the search tree. */
   template <class Alloc2, class Mem>
   CUDA this_type& tell(const tell_type<Alloc2>& t, BInc<Mem>& has_changed) {
-    has_changed.tell_top();
+    if(t.size() > 0) {
+      has_changed.tell_top();
+    }
     return tell(t);
   }
 
@@ -323,7 +326,7 @@ public:
         case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());
         case ValueOrder::SPLIT: return make_branch(x, LEQ, GT, a->project(x).median().lb());
         case ValueOrder::REVERSE_SPLIT: return make_branch(x, GT, LEQ, a->project(x).median().lb());
-        default: printf("unsupported value order strategy\n"); assert(false); return branch_type{get_allocator()};
+        default: printf("BUG: unsupported value order strategy\n"); assert(false); return branch_type{get_allocator()};
       }
     }
     else {
