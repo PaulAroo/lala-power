@@ -32,8 +32,6 @@ public:
   using sub_allocator_type = typename A::allocator_type;
   using split_type = Split;
   using branch_type = typename split_type::branch_type;
-  template <class Alloc>
-  using ask_type = typename A::template ask_type<Alloc>;
   using universe_type = typename A::universe_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
@@ -44,7 +42,7 @@ public:
   struct tell_type {
     typename A::template tell_type<Alloc> sub_tell;
     typename split_type::template tell_type<Alloc> split_tell;
-    CUDA NI tell_type(const Alloc& alloc): sub_tell(alloc), split_tell(alloc) {}
+    CUDA tell_type(const Alloc& alloc = Alloc{}): sub_tell(alloc), split_tell(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
     tell_type& operator=(tell_type&&) = default;
@@ -203,7 +201,7 @@ public:
 
   template <IKind kind, bool diagnose = false, class F, class Env, class I>
   CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics<F>& diagnostics) const {
-    if constexpr(kind == IKind::Tell) {
+    if constexpr(kind == IKind::TELL) {
       return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
     }
     else {

@@ -35,10 +35,12 @@ TEST(SearchTreeTest, EnumerationSolution) {
   EXPECT_TRUE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  auto st_res = search_tree.interpret_tell_in(*f, env);
-  EXPECT_TRUE(st_res.has_value());
+  using F = TFormula<standard_allocator>;
+  IDiagnostics<F> diagnostics;
+  ST::tell_type<standard_allocator> tell;
+  EXPECT_TRUE(search_tree.template interpret_tell<true>(*f, env, tell, diagnostics));
   local::BInc has_changed;
-  search_tree.tell(st_res.value(), has_changed);
+  search_tree.tell(tell, has_changed);
   EXPECT_TRUE(has_changed);
 
   EXPECT_FALSE(search_tree.is_bot());
@@ -99,10 +101,12 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   EXPECT_TRUE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
 
-  auto st_res = search_tree.interpret_tell_in(*f, env);
-  EXPECT_TRUE(st_res.has_value());
+  using F = TFormula<standard_allocator>;
+  IDiagnostics<F> diagnostics;
+  IST::tell_type<standard_allocator> tell;
+  EXPECT_TRUE(search_tree.template interpret_tell<true>(*f, env, tell, diagnostics));
   local::BInc has_changed;
-  search_tree.tell(st_res.value(), has_changed);
+  search_tree.tell(tell, has_changed);
   EXPECT_TRUE(has_changed);
 
   AbstractDeps<standard_allocator> deps{standard_allocator{}};

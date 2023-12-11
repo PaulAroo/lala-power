@@ -33,30 +33,30 @@ public:
   using best_ptr = abstract_ptr<best_type>;
   using this_type = BAB<sub_type, best_type>;
 
-  template <class Alloc2>
+  template <class Alloc>
   struct tell_type {
-    using sub_tell_type = sub_type::template tell_type<Alloc2>;
+    using sub_tell_type = sub_type::template tell_type<Alloc>;
     AVar x;
     bool optimization_mode;
     sub_tell_type sub_tell;
-    tell_type() = default;
-    tell_type(tell_type<Alloc2>&&) = default;
-    tell_type(const tell_type<Alloc2>&) = default;
-    CUDA NI tell_type(AVar x, bool opt, const Alloc2& alloc = Alloc2{}):
+    tell_type(const Alloc& alloc = Alloc{}): sub_tell(alloc) {}
+    tell_type(tell_type<Alloc>&&) = default;
+    tell_type(const tell_type<Alloc>&) = default;
+    CUDA NI tell_type(AVar x, bool opt, const Alloc& alloc = Alloc{}):
       x(x), optimization_mode(opt), sub_tell(alloc) {}
 
     template <class BABTellType>
-    CUDA NI tell_type(const BABTellType& other, const Alloc2& alloc = Alloc2{}):
+    CUDA NI tell_type(const BABTellType& other, const Alloc& alloc = Alloc{}):
       x(other.x), optimization_mode(other.optimization_mode),
       sub_tell(other.sub_tell, alloc)
     {}
 
-    using allocator_type = Alloc2;
+    using allocator_type = Alloc;
     CUDA allocator_type get_allocator() const {
       return sub_tell.get_allocator();
     }
 
-    template <class Alloc3>
+    template <class Alloc2>
     friend struct tell_type;
   };
 

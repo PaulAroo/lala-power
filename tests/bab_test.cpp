@@ -35,11 +35,11 @@ void test_unconstrained_bab(bool mode) {
   EXPECT_TRUE(bab.is_bot());
   EXPECT_FALSE(bab.is_top());
 
-  auto bab_res = bab.interpret_tell_in(*f, env);
-  // bab_res.print_diagnostics();
-  EXPECT_TRUE(bab_res.has_value());
+  IDiagnostics<F> diagnostics;
+  BAB_::tell_type<standard_allocator> tell;
+  EXPECT_TRUE(bab.template interpret_tell<true>(*f, env, tell, diagnostics));
   local::BInc has_changed;
-  bab.tell(bab_res.value(), has_changed);
+  bab.tell(tell, has_changed);
   EXPECT_TRUE(has_changed);
 
   EXPECT_FALSE(bab.is_bot());
@@ -97,11 +97,12 @@ void test_constrained_bab(bool mode) {
   auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
   auto bab = IBAB(env.extends_abstract_dom(), search_tree, best);
 
-  auto bab_res = bab.interpret_tell_in(*f, env);
-  // bab_res.print_diagnostics();
-  EXPECT_TRUE(bab_res.has_value());
+  using F = TFormula<standard_allocator>;
+  IDiagnostics<F> diagnostics;
+  IBAB::tell_type<standard_allocator> tell;
+  EXPECT_TRUE(bab.template interpret_tell<true>(*f, env, tell, diagnostics));
   local::BInc has_changed;
-  bab.tell(bab_res.value(), has_changed);
+  bab.tell(tell, has_changed);
   EXPECT_TRUE(has_changed);
 
   // Find solution optimizing a[3].

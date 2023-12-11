@@ -27,7 +27,10 @@ void test_strategy(
   auto f = parser.parse("var 1..1: x1; var 3..8: x2; var 5..5: x3; var 4..6: x4; var 0..7: x5; var 2..10: x6; var 2..2: x7;");
   EXPECT_TRUE(f);
   VarEnv<standard_allocator> env;
-  auto store_res = IStore::interpret_tell(*f, env);
+  using F = TFormula<standard_allocator>;
+  IDiagnostics<F> diagnostics;
+  auto store_res = create_and_interpret_and_tell<IStore, true>(*f, env, diagnostics);
+  EXPECT_TRUE(store_res.has_value());
   shared_ptr<IStore, standard_allocator> store =
     make_shared<IStore, standard_allocator>(store_res.value());
   shared_ptr<SplitStrategy<IStore>> split =
@@ -35,19 +38,19 @@ void test_strategy(
   auto strat = parser.parse(
     "solve::int_search([x1,x2,x3,x4,x5,x6,x7], " + variable_order + ", " + value_order + ", complete) satisfy;");
   EXPECT_TRUE(strat);
-  auto split_res = split->interpret_tell_in(*strat, env);
-  EXPECT_TRUE(split_res.has_value());
-  split->tell(split_res.value());
+  SplitStrategy<IStore>::tell_type<standard_allocator> split_tell;
+  EXPECT_TRUE(split->template interpret_tell<true>(*strat, env, split_tell, diagnostics));
+  split->tell(split_tell);
   auto branches = split->split();
   auto left_branch = branches.next();
   EXPECT_EQ(branches.size(), 2);
   EXPECT_EQ(left_branch.size(), 1);
-  EXPECT_EQ(left_branch[0].idx, var_idx);
+  EXPECT_EQ(left_branch[0].avar.vid(), var_idx);
   apply_branch_and_test(store, left_branch, var_idx, left);
   auto right_branch = branches.next();
   EXPECT_EQ(branches.size(), 2);
   EXPECT_EQ(right_branch.size(), 1);
-  EXPECT_EQ(right_branch[0].idx, var_idx);
+  EXPECT_EQ(right_branch[0].avar.vid(), var_idx);
   apply_branch_and_test(store, right_branch, var_idx, right);
 }
 

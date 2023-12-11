@@ -195,8 +195,10 @@ private:
     }
     else {
       printf("%% WARNING: The subdomain does not support the underlying search strategy.\n");
-      left.print_diagnostics();
-      right.print_diagnostics();
+      // Diagnostics mode.
+      a->template interpret_tell<true>(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env, left, diagnostics);
+      a->template interpret_tell<true>(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env, right, diagnostics);
+      diagnostics.print();
       return branch_type{get_allocator()};
     }
   }
