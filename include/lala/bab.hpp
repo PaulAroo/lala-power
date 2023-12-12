@@ -130,7 +130,7 @@ public:
 
 public:
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics& diagnostics) const {
     if(f.is_untyped() || f.type() == aty()) {
       if(f.is(F::Seq) && (f.sig() == MAXIMIZE || f.sig() == MINIMIZE)) {
         if(f.seq(0).is_variable()) {
@@ -159,12 +159,12 @@ public:
   }
 
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_ask(const F& f, const Env& env, ask_type<Alloc2>& ask, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret_ask(const F& f, const Env& env, ask_type<Alloc2>& ask, IDiagnostics& diagnostics) const {
     return sub->template interpret_ask<diagnose>(f, env, ask, diagnostics);
   }
 
   template <IKind kind, bool diagnose = false, class F, class Env, class I>
-  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics& diagnostics) const {
     if constexpr(kind == IKind::TELL) {
       return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
     }
@@ -211,7 +211,7 @@ public:
     VarEnv<allocator_type> empty_env{};
     using F = TFormula<allocator_type>;
     F bound_formula = deinterpret_best_bound(best_bound, get_allocator());
-    IDiagnostics<F> diagnostics;
+    IDiagnostics diagnostics;
     typename sub_type::template tell_type<allocator_type> t;
     bool res = sub->interpret_tell(bound_formula, empty_env, t, diagnostics);
     assert(res);

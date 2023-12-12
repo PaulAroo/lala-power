@@ -47,6 +47,19 @@ public:
   using branch_type = Branch<sub_tell_type, allocator_type>;
   using this_type = SplitStrategy<sub_type, allocator_type>;
 
+  constexpr static const bool is_abstract_universe = false;
+  constexpr static const bool sequential = sub_type::sequential;
+  constexpr static const bool is_totally_ordered = false;
+  constexpr static const bool preserve_bot = true;
+  constexpr static const bool preserve_top = true;
+  // The next properties should be checked more seriously, relying on the sub-domain might be uneccessarily restrictive.
+  constexpr static const bool preserve_join = sub_type::preserve_join;
+  constexpr static const bool preserve_meet = sub_type::preserve_meet;
+  constexpr static const bool injective_concretization = sub_type::injective_concretization;
+  constexpr static const bool preserve_concrete_covers = sub_type::preserve_concrete_covers;
+
+  constexpr static const char* name = "SplitStrategy";
+
   template <class Alloc>
   struct snapshot_type {
     size_t num_strategies;
@@ -79,13 +92,10 @@ public:
     ValueOrder val_order;
     battery::vector<AVar, Alloc2> vars;
 
-    template <class StrategyType>
-    CUDA strategy_type(const StrategyType& other, const Alloc2& alloc = Alloc2())
-    : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
-
-    strategy_type(const Alloc2& alloc = Alloc2{}): var_order(VariableOrder::INPUT_ORDER), val_order(ValueOrder::MIN), vars(alloc) {}
+    CUDA strategy_type(const Alloc2& alloc = Alloc2{}): var_order(VariableOrder::INPUT_ORDER), val_order(ValueOrder::MIN), vars(alloc) {}
     strategy_type(const strategy_type<Alloc2>&) = default;
     strategy_type(strategy_type<Alloc2>&&) = default;
+    strategy_type& operator=(strategy_type<Alloc2>&&) = default;
 
     CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
       : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
@@ -95,14 +105,16 @@ public:
       return vars.get_allocator();
     }
 
+    template <class StrategyType>
+    CUDA strategy_type(const StrategyType& other, const Alloc2& alloc = Alloc2{})
+    : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
+
     template <class Alloc3>
     friend class strategy_type;
   };
 
   template <class Alloc2>
   using tell_type = battery::vector<strategy_type<Alloc2>, Alloc2>;
-
-  constexpr static const char* name = "SplitStrategy";
 
   template <class A2, class Alloc2>
   friend class SplitStrategy;
@@ -180,7 +192,7 @@ private:
     using branch_vector = battery::vector<sub_tell_type, allocator_type>;
     VarEnv<allocator_type> empty_env{};
     auto k = u.template deinterpret<F>();
-    IDiagnostics<F> diagnostics;
+    IDiagnostics diagnostics;
     sub_tell_type left{get_allocator()};
     sub_tell_type right{get_allocator()};
     bool res = a->interpret_tell(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env, left, diagnostics);
@@ -241,7 +253,7 @@ public:
 
   /** This interpretation function expects `f` to be a predicate of the form `search(VariableOrder, ValueOrder, x_1, x_2, ..., x_n)`. */
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics& diagnostics) const {
     if(!(f.is(F::ESeq)
       && f.eseq().size() >= 2
       && f.esig() == "search"
@@ -290,6 +302,12 @@ public:
     }
     tell.push_back(std::move(strat));
     return true;
+  }
+
+  template <IKind kind, bool diagnose = false, class F, class Env, class I>
+  CUDA bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics& diagnostics) const {
+    static_assert(kind == IKind::TELL);
+    return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
   }
 
   template <class Alloc2>

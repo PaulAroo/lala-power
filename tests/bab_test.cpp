@@ -35,7 +35,7 @@ void test_unconstrained_bab(bool mode) {
   EXPECT_TRUE(bab.is_bot());
   EXPECT_FALSE(bab.is_top());
 
-  IDiagnostics<F> diagnostics;
+  IDiagnostics diagnostics;
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   EXPECT_FALSE(bab.is_bot());
@@ -94,7 +94,7 @@ void test_constrained_bab(bool mode) {
   auto bab = IBAB(env.extends_abstract_dom(), search_tree, best);
 
   using F = TFormula<standard_allocator>;
-  IDiagnostics<F> diagnostics;
+  IDiagnostics diagnostics;
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   // Find solution optimizing a[3].

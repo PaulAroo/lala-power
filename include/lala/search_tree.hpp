@@ -194,7 +194,7 @@ public:
 
 public:
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics& diagnostics) const {
     assert(!is_top());
     if(f.is(F::ESeq) && f.esig() == "search") {
       return split->template interpret_tell<diagnose>(f, env, tell.split_tell, diagnostics);
@@ -205,13 +205,13 @@ public:
   }
 
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_ask(const F& f, Env& env, ask_type<Alloc2>& ask, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret_ask(const F& f, Env& env, ask_type<Alloc2>& ask, IDiagnostics& diagnostics) const {
     assert(!is_top());
     return a->template interpret_ask<diagnose>(f, env, ask, diagnostics);
   }
 
   template <IKind kind, bool diagnose = false, class F, class Env, class I>
-  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics<F>& diagnostics) const {
+  CUDA NI bool interpret(const F& f, Env& env, I& intermediate, IDiagnostics& diagnostics) const {
     if constexpr(kind == IKind::TELL) {
       return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
     }

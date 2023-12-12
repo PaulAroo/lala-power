@@ -28,7 +28,7 @@ void test_strategy(
   EXPECT_TRUE(f);
   VarEnv<standard_allocator> env;
   using F = TFormula<standard_allocator>;
-  IDiagnostics<F> diagnostics;
+  IDiagnostics diagnostics;
   auto store_res = create_and_interpret_and_tell<IStore, true>(*f, env, diagnostics);
   EXPECT_TRUE(store_res.has_value());
   shared_ptr<IStore, standard_allocator> store =

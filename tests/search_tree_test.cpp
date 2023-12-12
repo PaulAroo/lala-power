@@ -36,7 +36,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
   EXPECT_FALSE(search_tree.is_top());
 
   using F = TFormula<standard_allocator>;
-  IDiagnostics<F> diagnostics;
+  IDiagnostics diagnostics;
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, search_tree, diagnostics));
 
   EXPECT_FALSE(search_tree.is_bot());
@@ -99,7 +99,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   EXPECT_FALSE(search_tree.is_top());
 
   using F = TFormula<standard_allocator>;
-  IDiagnostics<F> diagnostics;
+  IDiagnostics diagnostics;
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, search_tree, diagnostics));
 
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
