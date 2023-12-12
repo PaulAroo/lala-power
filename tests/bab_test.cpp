@@ -36,18 +36,14 @@ void test_unconstrained_bab(bool mode) {
   EXPECT_FALSE(bab.is_top());
 
   IDiagnostics<F> diagnostics;
-  BAB_::tell_type<standard_allocator> tell;
-  EXPECT_TRUE(bab.template interpret_tell<true>(*f, env, tell, diagnostics));
-  local::BInc has_changed;
-  bab.tell(tell, has_changed);
-  EXPECT_TRUE(has_changed);
+  EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   EXPECT_FALSE(bab.is_bot());
   EXPECT_FALSE(bab.is_top());
 
   // Find solution optimizing a[3].
+  local::BInc has_changed{true};
   int iterations = 0;
-  has_changed = true;
   while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
@@ -99,14 +95,10 @@ void test_constrained_bab(bool mode) {
 
   using F = TFormula<standard_allocator>;
   IDiagnostics<F> diagnostics;
-  IBAB::tell_type<standard_allocator> tell;
-  EXPECT_TRUE(bab.template interpret_tell<true>(*f, env, tell, diagnostics));
-  local::BInc has_changed;
-  bab.tell(tell, has_changed);
-  EXPECT_TRUE(has_changed);
+  EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   // Find solution optimizing a[3].
-  has_changed = true;
+  local::BInc has_changed{true};
   int iterations = 0;
   while(!bab.is_extractable() && has_changed) {
     iterations++;

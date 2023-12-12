@@ -33,6 +33,18 @@ public:
   using best_ptr = abstract_ptr<best_type>;
   using this_type = BAB<sub_type, best_type>;
 
+  constexpr static const bool is_abstract_universe = false;
+  constexpr static const bool sequential = sub_type::sequential;
+  constexpr static const bool is_totally_ordered = false;
+  constexpr static const bool preserve_bot = true;
+  constexpr static const bool preserve_top = true;
+  // The next properties should be checked more seriously, relying on the sub-domain might be uneccessarily restrictive.
+  constexpr static const bool preserve_join = sub_type::preserve_join;
+  constexpr static const bool preserve_meet = sub_type::preserve_meet;
+  constexpr static const bool injective_concretization = sub_type::injective_concretization;
+  constexpr static const bool preserve_concrete_covers = sub_type::preserve_concrete_covers;
+  constexpr static const char* name = "BAB";
+
   template <class Alloc>
   struct tell_type {
     using sub_tell_type = sub_type::template tell_type<Alloc>;
@@ -41,6 +53,7 @@ public:
     sub_tell_type sub_tell;
     tell_type(const Alloc& alloc = Alloc{}): sub_tell(alloc) {}
     tell_type(tell_type<Alloc>&&) = default;
+    tell_type& operator=(tell_type<Alloc>&&) = default;
     tell_type(const tell_type<Alloc>&) = default;
     CUDA NI tell_type(AVar x, bool opt, const Alloc& alloc = Alloc{}):
       x(x), optimization_mode(opt), sub_tell(alloc) {}
@@ -62,8 +75,6 @@ public:
 
   template <class Alloc2>
   using ask_type = typename sub_type::template ask_type<Alloc2>;
-
-  constexpr static const char* name = "BAB";
 
   template <class A2, class B2>
   friend class BAB;

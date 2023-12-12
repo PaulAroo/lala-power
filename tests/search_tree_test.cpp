@@ -37,11 +37,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
 
   using F = TFormula<standard_allocator>;
   IDiagnostics<F> diagnostics;
-  ST::tell_type<standard_allocator> tell;
-  EXPECT_TRUE(search_tree.template interpret_tell<true>(*f, env, tell, diagnostics));
-  local::BInc has_changed;
-  search_tree.tell(tell, has_changed);
-  EXPECT_TRUE(has_changed);
+  EXPECT_TRUE(interpret_and_tell<true>(*f, env, search_tree, diagnostics));
 
   EXPECT_FALSE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
@@ -49,6 +45,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
   ST sol(search_tree, deps);
 
+  local::BInc has_changed;
   int solutions = 0;
   for(int x1 = 0; x1 < 3; ++x1) {
     for(int x2 = 0; x2 < 3; ++x2) {
@@ -103,15 +100,12 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
 
   using F = TFormula<standard_allocator>;
   IDiagnostics<F> diagnostics;
-  IST::tell_type<standard_allocator> tell;
-  EXPECT_TRUE(search_tree.template interpret_tell<true>(*f, env, tell, diagnostics));
-  local::BInc has_changed;
-  search_tree.tell(tell, has_changed);
-  EXPECT_TRUE(has_changed);
+  EXPECT_TRUE(interpret_and_tell<true>(*f, env, search_tree, diagnostics));
 
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
   IST sol(search_tree, deps);
 
+  local::BInc has_changed;
   int solutions = 0;
   vector<vector<int>> sols = {
     {0, 0, 0},

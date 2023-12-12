@@ -38,6 +38,18 @@ public:
   using split_ptr = abstract_ptr<split_type>;
   using this_type = SearchTree<sub_type, split_type, allocator_type>;
 
+  constexpr static const bool is_abstract_universe = false;
+  constexpr static const bool sequential = sub_type::sequential;
+  constexpr static const bool is_totally_ordered = false;
+  constexpr static const bool preserve_bot = true;
+  constexpr static const bool preserve_top = true;
+  // The next properties should be checked more seriously, relying on the sub-domain might be uneccessarily restrictive.
+  constexpr static const bool preserve_join = sub_type::preserve_join;
+  constexpr static const bool preserve_meet = sub_type::preserve_meet;
+  constexpr static const bool injective_concretization = sub_type::injective_concretization;
+  constexpr static const bool preserve_concrete_covers = sub_type::preserve_concrete_covers;
+  constexpr static const char* name = "SearchTree";
+
   template <class Alloc>
   struct tell_type {
     typename A::template tell_type<Alloc> sub_tell;
@@ -65,7 +77,6 @@ public:
   template<class Alloc>
   using ask_type = typename A::template ask_type<Alloc>;
 
-  constexpr static const char* name = "SearchTree";
 
   template <class A2, class S2, class Alloc2>
   friend class SearchTree;
