@@ -189,7 +189,7 @@ public:
     root = battery::make_tuple(
       a->snapshot(get_allocator()),
       split->snapshot(get_allocator()));
-    root_tell = root_tell_type{get_allocator()};
+    root_tell = root_tell_type(get_allocator());
   }
 
 public:

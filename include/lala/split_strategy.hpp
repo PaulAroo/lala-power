@@ -186,15 +186,15 @@ private:
       if(u.is_bot()) {
         printf("%% WARNING: Cannot currently branch on unbounded variables.\n");
       }
-      return branch_type{get_allocator()};
+      return branch_type(get_allocator());
     }
     using F = TFormula<allocator_type>;
     using branch_vector = battery::vector<sub_tell_type, allocator_type>;
     VarEnv<allocator_type> empty_env{};
     auto k = u.template deinterpret<F>();
     IDiagnostics diagnostics;
-    sub_tell_type left{get_allocator()};
-    sub_tell_type right{get_allocator()};
+    sub_tell_type left(get_allocator());
+    sub_tell_type right(get_allocator());
     bool res = a->interpret_tell(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env, left, diagnostics);
     res &= a->interpret_tell(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env, right, diagnostics);
     if(res) {
@@ -211,7 +211,7 @@ private:
       a->template interpret_tell<true>(F::make_binary(F::make_avar(x), left_op, k, x.aty(), get_allocator()), empty_env, left, diagnostics);
       a->template interpret_tell<true>(F::make_binary(F::make_avar(x), right_op, k, x.aty(), get_allocator()), empty_env, right, diagnostics);
       diagnostics.print();
-      return branch_type{get_allocator()};
+      return branch_type(get_allocator());
     }
   }
 
@@ -249,6 +249,12 @@ public:
     }
     current_strategy = snap.current_strategy;
     next_unassigned_var = snap.next_unassigned_var;
+  }
+
+  /** Restart the search from the first variable. */
+  CUDA void reset() {
+    current_strategy = 0;
+    next_unassigned_var = 0;
   }
 
   /** This interpretation function expects `f` to be a predicate of the form `search(VariableOrder, ValueOrder, x_1, x_2, ..., x_n)`. */
@@ -313,7 +319,9 @@ public:
   template <class Alloc2>
   CUDA this_type& tell(const tell_type<Alloc2>& t) {
     for(int i = 0; i < t.size(); ++i) {
-      strategies.push_back(t[i]);
+      if(t[i].vars.size() > 0) {
+        strategies.push_back(t[i]);
+      }
     }
     return *this;
   }
@@ -335,7 +343,7 @@ public:
    This also means that you cannot suppose `split(a) = {}` to mean `a` is at `top`. */
   CUDA NI branch_type split() {
     if(a->is_top()) {
-      return branch_type{get_allocator()};
+      return branch_type(get_allocator());
     }
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
@@ -346,11 +354,11 @@ public:
         case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());
         case ValueOrder::SPLIT: return make_branch(x, LEQ, GT, a->project(x).median().lb());
         case ValueOrder::REVERSE_SPLIT: return make_branch(x, GT, LEQ, a->project(x).median().lb());
-        default: printf("BUG: unsupported value order strategy\n"); assert(false); return branch_type{get_allocator()};
+        default: printf("BUG: unsupported value order strategy\n"); assert(false); return branch_type(get_allocator());
       }
     }
     else {
-      return branch_type{get_allocator()};
+      return branch_type(get_allocator());
     }
   }
 
