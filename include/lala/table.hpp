@@ -11,21 +11,34 @@
 
 namespace lala {
 
-template <class A, class Allocator = typename A::allocator_type>
+template <class A, class U, class Alloc> class Talbe;
+namespace impl {
+  template <class>
+  struct is_table_like {
+    static constexpr bool value = false;
+  };
+  template<class A, class U, class Alloc>
+  struct is_table_like<Table<A, U, Alloc>> {
+    static constexpr bool value = true;
+  };
+}
+
+template <class A, class U = typename A::universe_type, class Allocator = typename A::allocator_type>
 class Table {
 public:
   using allocator_type = Allocator;
   using sub_allocator_type = typename A::allocator_type;
   using universe_type = typename A::universe_type;
+  using local_universe = typename universe_type::local_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
-  using this_type = Table<sub_type, split_type, allocator_type>;
+  using this_type = Table<sub_type, universe_type, allocator_type>;
 
   constexpr static const bool is_abstract_universe = false;
   constexpr static const bool sequential = sub_type::sequential;
   constexpr static const bool is_totally_ordered = false;
-  constexpr static const bool preserve_bot = true;
-  constexpr static const bool preserve_top = true;
+  constexpr static const bool preserve_bot = sub_type::preserve_bot;
+  constexpr static const bool preserve_top = sub_type::preserve_top;
   // The next properties should be checked more seriously, relying on the sub-domain might be uneccessarily restrictive.
   constexpr static const bool preserve_join = sub_type::preserve_join;
   constexpr static const bool preserve_meet = sub_type::preserve_meet;
@@ -33,26 +46,54 @@ public:
   constexpr static const bool preserve_concrete_covers = sub_type::preserve_concrete_covers;
   constexpr static const char* name = "Table";
 
-  using table_type = battery::vector<universe_type, allocator_type>;
+  using table_type = battery::vector<
+    battery::vector<universe_type, allocator_type>,
+    allocator_type>;
 
+  using table_collection_type = battery::vector<table_type, allocator_type>;
+
+private:
+  AType atype;
+  sub_ptr sub;
+
+  battery::vector<battery::vector<AVar, allocator_type>, allocator_type> headers;
+
+  table_collection_type tell_tables;
+  table_collection_type ask_tables;
+
+public:
   template <class Alloc>
   struct tell_type {
+    using allocator_type = Alloc;
+
     typename A::template tell_type<Alloc> sub_tell;
-    typename split_type::template tell_type<Alloc> split_tell;
+
+    battery::vector<battery::vector<AVar, Alloc>, Alloc> headers;
+
+    battery::vector<battery::vector<
+      battery::vector<universe_type, Alloc>,
+    Alloc>, Alloc> tell_tables;
+
+    battery::vector<battery::vector<
+      battery::vector<universe_type, Alloc>,
+    Alloc>, Alloc> ask_tables;
+
     CUDA tell_type(const Alloc& alloc = Alloc{}): sub_tell(alloc), split_tell(alloc) {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
     tell_type& operator=(tell_type&&) = default;
     tell_type& operator=(const tell_type&) = default;
 
-    template <class SearchTreeTellType>
-    CUDA NI tell_type(const SearchTreeTellType& other, const Alloc& alloc = Alloc{})
-      : sub_tell(other.sub_tell, alloc), split_tell(other.split_tell, alloc)
+    template <class TableTellType>
+    CUDA NI tell_type(const TableTellType& other, const Alloc& alloc = Alloc{})
+      : sub_tell(other.sub_tell, alloc)
+      , headers(other.headers, alloc)
+      , tell_tables(other.tell_tables, alloc)
+      , ask_tables(other.ask_tables, alloc)
     {}
 
-    using allocator_type = Alloc;
     CUDA allocator_type get_allocator() const {
-      return sub_tell.get_allocator();
+      return headers.get_allocator();
     }
 
     template <class Alloc2>
@@ -62,53 +103,25 @@ public:
   template<class Alloc>
   using ask_type = typename A::template ask_type<Alloc>;
 
-
-  template <class A2, class S2, class Alloc2>
+  template <class A2, class U2, class Alloc2>
   friend class Table;
 
-private:
-  AType atype;
-  // `a` reflects the current node of the search tree being refined and expanded.
-  // If the search tree is `top` (i.e., empty), then `a` is equal to `nullptr`.
-  sub_ptr a;
-  split_ptr split;
-  battery::vector<branch_type, allocator_type> stack;
-  using sub_snapshot_type = sub_type::template snapshot_type<allocator_type>;
-  using split_snapshot_type = split_type::template snapshot_type<allocator_type>;
-  using root_type = battery::tuple<sub_snapshot_type, split_snapshot_type>;
-  root_type root;
-
-  // Tell formulas (and strategies) to be added to root on backtracking.
-  struct root_tell_type {
-    battery::vector<typename A::template tell_type<allocator_type>, allocator_type> sub_tells;
-    battery::vector<typename split_type::template tell_type<allocator_type>, allocator_type> split_tells;
-    CUDA root_tell_type(const allocator_type& alloc): sub_tells(alloc), split_tells(alloc) {}
-    template <class RootTellType>
-    CUDA root_tell_type(const RootTellType& other, const allocator_type& alloc)
-     : sub_tells(other.sub_tells, alloc), split_tells(other.split_tells, alloc) {}
-  };
-  root_tell_type root_tell;
-
 public:
-  CUDA Table(AType uid, sub_ptr a, split_ptr split, const allocator_type& alloc = allocator_type())
+  CUDA Table(AType uid, sub_ptr sub, const allocator_type& alloc = allocator_type())
    : atype(uid)
-   , a(std::move(a))
-   , split(std::move(split))
-   , stack(alloc)
-   , root(battery::make_tuple(this->a->snapshot(alloc), this->split->snapshot(alloc)))
-   , root_tell(alloc)
+   , sub(std::move(sub))
+   , headers(alloc)
+   , tell_tables(alloc)
+   , ask_tables(alloc)
   {}
 
-  template<class A2, class S2, class Alloc2, class... Allocators>
-  CUDA NI Table(const Table<A2, S2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
+  template<class A2, class U2, class Alloc2, class... Allocators>
+  CUDA NI Table(const Table<A2, U2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
-   , a(deps.template clone<sub_type>(other.a))
-   , split(deps.template clone<split_type>(other.split))
-   , stack(other.stack, deps.template get_allocator<allocator_type>())
-   , root(
-      sub_snapshot_type(battery::get<0>(other.root), deps.template get_allocator<allocator_type>()),
-      split_snapshot_type(battery::get<1>(other.root), deps.template get_allocator<allocator_type>()))
-   , root_tell(other.root_tell, deps.template get_allocator<allocator_type>())
+   , sub(deps.template clone<sub_type>(other.sub))
+   , headers(other.headers, deps.template get_allocator<allocator_type>())
+   , tell_tables(other.tell_tables, deps.template get_allocator<allocator_type>())
+   , ask_tables(other.ask_tables, deps.template get_allocator<allocator_type>())
   {}
 
   CUDA AType aty() const {
@@ -116,29 +129,22 @@ public:
   }
 
   CUDA allocator_type get_allocator() const {
-    return stack.get_allocator();
-  }
-
-  CUDA local::BDec is_singleton() const {
-    return stack.empty() && bool(a);
+    return headers.get_allocator();
   }
 
   CUDA local::BDec is_bot() const {
-    // We need short-circuit using && due to `a` possibly a null pointer.
-    return is_singleton() && a->is_bot();
+    return sub->is_bot();
   }
 
   CUDA local::BInc is_top() const {
-    return !bool(a);
+    return sub->is_top();
   }
 
   template <class Alloc2>
   struct snapshot_type {
     using sub_snap_type = sub_type::template snapshot_type<Alloc2>;
-    using split_snap_type = split_type::template snapshot_type<Alloc2>;
     sub_snap_type sub_snap;
-    split_snap_type split_snap;
-    sub_ptr sub;
+    size_t num_tables;
 
     snapshot_type(const snapshot_type<Alloc2>&) = default;
     snapshot_type(snapshot_type<Alloc2>&&) = default;
@@ -148,41 +154,77 @@ public:
     template <class SnapshotType>
     CUDA snapshot_type(const SnapshotType& other, const Alloc2& alloc = Alloc2())
       : sub_snap(other.sub_snap, alloc)
-      , split_snap(other.split_snap, alloc)
-      , sub(other.sub)
+      , num_tables(other.num_tables)
     {}
 
-    CUDA snapshot_type(sub_snap_type&& sub_snap, split_snap_type&& split_snap, sub_ptr sub)
+    CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables)
       : sub_snap(std::move(sub_snap))
-      , split_snap(std::move(split_snap))
-      , sub(sub)
+      , num_tables(num_tables)
     {}
   };
 
   template <class Alloc2 = allocator_type>
   CUDA snapshot_type<Alloc2> snapshot(const Alloc2& alloc = Alloc2()) const {
-    assert(is_singleton());
-    return snapshot_type<Alloc2>(a->snapshot(alloc), split->snapshot(alloc), a);
+    return snapshot_type<Alloc2>(sub->snapshot(alloc), headers.size());
   }
 
   template <class Alloc2>
   CUDA void restore(const snapshot_type<Alloc2>& snap) {
-    a = snap.sub;
-    a->restore(snap.sub_snap);
-    split->restore(snap.split_snap);
-    stack.clear();
-    root = battery::make_tuple(
-      a->snapshot(get_allocator()),
-      split->snapshot(get_allocator()));
-    root_tell = root_tell_type(get_allocator());
+    sub->restore(snap.sub_snap);
+    headers.resize(snap.num_tables);
+    tell_tables.resize(snap.num_tables);
+    ask_tables.resize(snap.num_tables);
   }
 
 public:
   template <bool diagnose = false, class F, class Env, class Alloc2>
   CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics& diagnostics) const {
-    assert(!is_top());
-    if(f.is(F::ESeq) && f.esig() == "search") {
-      return split->template interpret_tell<diagnose>(f, env, tell.split_tell, diagnostics);
+    if(f.is(F::Seq) && f.sig() == OR) {
+      battery::vector<AVar, Alloc2> header(tell.get_allocator());
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> tell_table(tell.get_allocator());
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> ask_table(tell.get_allocator());
+      for(int i = 0; i < f.seq().size(); ++i) {
+        if(f.seq(i).is(F::Seq) && f.seq(i).sig() == AND) {
+          // Add a row in the table.
+          tell_table.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), tell.get_allocator()));
+          ask_table.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), tell.get_allocator()));
+          const auto& row = f.seq(i).seq();
+          for(int j = 0; j < row.size(); ++j) {
+            if(num_vars(row[j]) != 1) {
+              RETURN_INTERPRETATION_ERROR("Only unary formulas are supported in the cell of the table.");
+            }
+            else {
+              // TODO: return an error if the variable is not declared in env.
+              AVar x = var_in(row[j], env).value();
+              int idx = 0;
+              for(; idx < header.size() && header[idx] != x; ++idx) {}
+              // If it's a new variable not present in the previous rows, we add it in each row with bottom value.
+              if(idx == header.size()) {
+                header.push_back(x);
+                for(int i = 0; i < tell_table.size(); ++i) {
+                  tell_table[i].push_back(local_universe::bot());
+                  ask_table[i].push_back(local_universe::bot());
+                }
+              }
+              local_universe tell_u{local::universe::bot()};
+              local_universe ask_u{local::universe::bot()};
+              if( local_universe::interpret_tell<diagnose>(row[j], env, tell_u, diagnostics)
+               && local_universe::interpret_ask<diagnose>(row[j], env, ask_u, diagnostics))
+              {
+                tell_table[i][j].tell(tell_u);
+                ask_table[i][j].tell(ask_u);
+              }
+              else {
+                return false;
+              }
+            }
+          }
+        }
+        else {
+          // To improve, we could support it by interpreting a single atom.
+          RETURN_INTERPRETATION_ERROR("Only disjunction of conjunctions are supported.");
+        }
+      }
     }
     else {
       return a->template interpret_tell<diagnose>(f, env, tell.sub_tell, diagnostics);
@@ -190,9 +232,8 @@ public:
   }
 
   template <bool diagnose = false, class F, class Env, class Alloc2>
-  CUDA NI bool interpret_ask(const F& f, Env& env, ask_type<Alloc2>& ask, IDiagnostics& diagnostics) const {
-    assert(!is_top());
-    return a->template interpret_ask<diagnose>(f, env, ask, diagnostics);
+  CUDA NI bool interpret_ask(const F& f, const Env& env, ask_type<Alloc2>& ask, IDiagnostics& diagnostics) const {
+    return interpret_tell<diagnose>(f, const_cast<Env&>(env), ask, diagnostics);
   }
 
   template <IKind kind, bool diagnose = false, class F, class Env, class I>
@@ -205,178 +246,56 @@ public:
     }
   }
 
-private:
-  template <class Alloc, class Mem>
-  CUDA void tell_current(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    a->tell(t.sub_tell, has_changed);
-    split->tell(t.split_tell, has_changed);
-  }
-
 public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    if(!is_top()) {
-      if(!is_singleton()) {
-        // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
-        root_tell.sub_tells.push_back(t.sub_tell);
-        root_tell.split_tells.push_back(t.split_tell);
-      }
-      // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
-      tell_current(t, has_changed);
+    for(int i = 0; i < t.headers.size(); ++i) {
+      // TODO
     }
-    return *this;
   }
-
-  /** The refinement of `a` and `split` is not done here, and if needed, should be done before calling this method.
-   * This refinement operator performs one iteration of \f$ \mathit{pop} \circ \mathit{push} \circ \mathit{split} \f$.
-   * In short, it initializes `a` to the next node of the search tree.
-   * If we observe `a` from the outside of this domain, `a` can backtrack, and therefore does not always evolve extensively and monotonically.
-   * Nevertheless, the refinement operator of the search tree abstract domain is extensive and monotonic (if split is) over the search tree. */
   template <class Mem>
   CUDA void refine(BInc<Mem>& has_changed) {
-    pop(push(split->split()), has_changed);
+    // TODO
   }
 
   template <class ExtractionStrategy = NonAtomicExtraction>
   CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
-    return !is_top() && a->is_extractable(strategy);
+    return sub->is_extractable(strategy);
   }
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
    * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
   template <class B>
   CUDA void extract(B& ua) const {
-    if constexpr(impl::is_search_tree_like<B>::value) {
-      assert(bool(ua.a));
-      a->extract(*ua.a);
-      ua.stack.clear();
-      ua.root_tell.sub_tells.clear();
-      ua.root_tell.split_tells.clear();
+    if constexpr(impl::is_table_like<B>::value) {
+      sub->extract(*ua.sub);
     }
     else {
-      a->extract(ua);
+      sub->extract(ua);
     }
   }
 
-  /** If the search tree is empty (\f$ \top \f$), we return \f$ \top_U \f$.
-   * If the search tree consists of a single node \f$ \{a\} \f$, we return the projection of `x` in that node.
-   * Projection in a search tree with multiple nodes is currently not supported (assert false). */
   CUDA universe_type project(AVar x) const {
-    if(is_top()) {
-      return universe_type::top();
+    return sub->project(x);
+  }
+
+  template<class Env>
+  CUDA NI TFormula<typename Env::allocator_type> deinterpret(const Env& env) const {
+    using F = TFormula<typename Env::allocator_type>;
+    F sub_f = sub->deinterpret(env);
+    typename F::Sequence seq{env.get_allocator()};
+    if(sub_f.is(F::Seq) && sub_f.sig() == AND) {
+      for(int i = 0; i < sub_f.seq().size(); ++i) {
+        seq.push_back(sub_f.seq(i));
+      }
     }
     else {
-      if(is_singleton()) {
-        return a->project(x);
-      }
-      else {
-        assert(false);
-        return universe_type::bot();
-        /** The problem with the method below is that we need to modify `a`, so project is not const anymore.
-         * That might be problematic to modify `a` for a projection if it is currently being refined...
-         * Perhaps need to copy `a` (inefficient), or request a projection in the snapshot directly. */
-        // a->restore(root);
-        // universe_type u = a->project(x);
-        // BInc has_changed = BInc::bot();
-        // replay(has_changed);
-        // return u;
-      }
+      seq.push_back(sub_f);
     }
-  }
-
-  /** \return the current depth of the search tree. The root node has a depth of 0. */
-  CUDA size_t depth() const {
-    return stack.size();
-  }
-
-private:
-  /** \return `true` if the current node is pruned, and `false` if a new branch was pushed. */
-  CUDA bool push(branch_type&& branch) {
-    if(branch.size() > 0) {
-      if(is_singleton()) {
-        root = battery::make_tuple(
-          a->snapshot(get_allocator()),
-          split->snapshot(get_allocator()));
-      }
-      stack.push_back(std::move(branch));
-      return false;
+    for(int i = 0; i < headers.size(); ++i) {
+      // TODO
     }
-    return true;
-  }
-
-  /** If the current node was pruned, we need to backtrack, otherwise we just consider the next node along the branch. */
-  template <class Mem>
-  CUDA void pop(bool pruned, BInc<Mem>& has_changed) {
-    if(!pruned) {
-      commit_left(has_changed);
-    }
-    else {
-      backtrack(has_changed);
-      commit_right(has_changed);
-    }
-  }
-
-  /** Given the current node, commit to the node on the left.
-   * If we are on the root node, we save a snapshot of root before committing to the left node. */
-  template <class Mem>
-  CUDA void commit_left(BInc<Mem>& has_changed) {
-    assert(bool(a));
-    a->tell(stack.back().next(), has_changed);
-  }
-
-  /** We explore the next node of the search tree available (after we backtracked, so it cannot be a left node). */
-  template <class Mem>
-  CUDA void commit_right(BInc<Mem>& has_changed) {
-    if(!stack.empty()) {
-      assert(bool(a));
-      stack.back().next();
-      replay(has_changed);
-    }
-  }
-
-  /** Goes from the current node to root. */
-  template <class Mem>
-  CUDA void backtrack(BInc<Mem>& has_changed) {
-    while(!stack.empty() && !stack.back().has_next()) {
-      stack.pop_back();
-    }
-    if(!stack.empty()) {
-      a->restore(battery::get<0>(root));
-      split->restore(battery::get<1>(root));
-      tell_root(has_changed);
-    }
-    else if(a) {
-      a = nullptr;
-      has_changed.tell_top();
-    }
-  }
-
-  /** We do not always have access to the root node, so formulas that are added to the search tree are kept in `root_tell`.
-   * During backtracking, root is available through `a`, and we add to root the formulas stored until now, so they become automatically available to the remaining nodes in the search tree. */
-  template <class Mem>
-  CUDA void tell_root(BInc<Mem>& has_changed) {
-    if(root_tell.sub_tells.size() > 0 || root_tell.split_tells.size() > 0) {
-      for(int i = 0; i < root_tell.sub_tells.size(); ++i) {
-        a->tell(root_tell.sub_tells[i], has_changed);
-      }
-      for(int i = 0; i < root_tell.split_tells.size(); ++i) {
-        split->tell(root_tell.split_tells[i], has_changed);
-      }
-      root_tell.sub_tells.clear();
-      root_tell.split_tells.clear();
-      // A new snapshot is necessary since we modified `a` and `split`.
-      root = battery::make_tuple(
-        a->snapshot(get_allocator()),
-        split->snapshot(get_allocator()));
-    }
-  }
-
-  /** Goes from `root` to the new node to be explored. */
-  template <class Mem>
-  CUDA void replay(BInc<Mem>& has_changed) {
-    for(int i = 0; i < stack.size(); ++i) {
-      a->tell(stack[i].current(), has_changed);
-    }
+    return F::make_nary(AND, std::move(seq), aty());
   }
 };
 
