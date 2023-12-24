@@ -23,13 +23,20 @@ namespace impl {
   };
 }
 
+/** The table abstract domain is designed to represent predicates in extension by listing all their solutions explicitly.
+ * It is inspired by the table global constraint and generalizes it by lifting each element of the table to a lattice element.
+ * We expect `U` to be equally or less expressive than `A::universe_type`, this is because we compute the meet in `A::universe_type` and not in `U`.
+ */
 template <class A, class U = typename A::universe_type, class Allocator = typename A::allocator_type>
 class Table {
 public:
   using allocator_type = Allocator;
   using sub_allocator_type = typename A::allocator_type;
-  using universe_type = typename A::universe_type;
+  using universe_type = U;
   using local_universe = typename universe_type::local_type;
+  using sub_universe_type = typename A::universe_type;
+  using sub_local_universe = typename sub_universe_type::local_type;
+  using memory_type = typename universe_type::memory_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
   using this_type = Table<sub_type, universe_type, allocator_type>;
@@ -49,17 +56,17 @@ public:
   using table_type = battery::vector<
     battery::vector<universe_type, allocator_type>,
     allocator_type>;
-
   using table_collection_type = battery::vector<table_type, allocator_type>;
+  using bitset_type = battery::dynamic_bitset<memory_type, allocator_type>;
 
 private:
   AType atype;
   sub_ptr sub;
 
   battery::vector<battery::vector<AVar, allocator_type>, allocator_type> headers;
-
   table_collection_type tell_tables;
   table_collection_type ask_tables;
+  battery::vector<bitset_type, allocator_type> eliminated_rows;
 
 public:
   template <class Alloc>
@@ -113,6 +120,7 @@ public:
    , headers(alloc)
    , tell_tables(alloc)
    , ask_tables(alloc)
+   , eliminated_rows(alloc)
   {}
 
   template<class A2, class U2, class Alloc2, class... Allocators>
@@ -122,6 +130,7 @@ public:
    , headers(other.headers, deps.template get_allocator<allocator_type>())
    , tell_tables(other.tell_tables, deps.template get_allocator<allocator_type>())
    , ask_tables(other.ask_tables, deps.template get_allocator<allocator_type>())
+   , eliminated_rows(other.eliminated_rows, deps.template get_allocator<allocator_type>())
   {}
 
   CUDA AType aty() const {
@@ -174,6 +183,7 @@ public:
     headers.resize(snap.num_tables);
     tell_tables.resize(snap.num_tables);
     ask_tables.resize(snap.num_tables);
+    eliminated_rows.resize(snap.num_tables);
   }
 
 public:
@@ -225,9 +235,13 @@ public:
           RETURN_INTERPRETATION_ERROR("Only disjunction of conjunctions are supported.");
         }
       }
+      tell.headers.push_back(std::move(header));
+      tell.tell_tables.push_back(std::move(tell_table));
+      tell.ask_tables.push_back(std::move(ask_table));
+      return true;
     }
     else {
-      return a->template interpret_tell<diagnose>(f, env, tell.sub_tell, diagnostics);
+      return sub->template interpret_tell<diagnose>(f, env, tell.sub_tell, diagnostics);
     }
   }
 
@@ -249,17 +263,85 @@ public:
 public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
+    if(headers.size() > 0) {
+      has_changed.tell_top();
+    }
+    sub->tell(t.sub_tell, has_changed);
     for(int i = 0; i < t.headers.size(); ++i) {
-      // TODO
+      headers.push_back(t.headers[i]);
+      tell_tables.push_back(t.tell_tables[i]);
+      ask_tables.push_back(t.ask_tables[i]);
+      eliminated_rows.push_back(bitset_type(tell_tables.back()[0].size(), get_allocator()));
+    }
+    return *this;
+  }
+
+  template <class Mem>
+  CUDA void crefine(size_t table_num, size_t col, BInc<Mem>& has_changed) {
+    sub_local_universe u{sub_local_universe::top()};
+    for(int j = 0; j < tell_tables[table_num].size(); ++j) {
+      if(!eliminated_rows[table_num].test(j)) {
+        if constexpr(std::is_same_v<universe_type, sub_universe_type>) {
+          u.dtell(tell_tables[table_num][j][col]);
+        }
+        else {
+          VarEnv<standard_allocator> env;
+          auto f = tell_tables[table_num][j][col].deinterpret(headers[table_num][col], env);
+          IDiagnostics diagnostics;
+          sub_local_universe v{sub_local_universe::bot()};
+          if(sub_local_universe::interpret_tell(f, env, v, diagnostics)) {
+            u.dtell(v);
+          }
+        }
+      }
+    }
+    sub->tell(headers[table_num][col], u, has_changed);
+  }
+
+  template <class Mem>
+  CUDA void lrefine(size_t table_num, size_t col, size_t row, BInc<Mem>& has_changed)
+  {
+    if(!eliminated_rows[table_num].test(row))
+    {
+      if constexpr(std::is_same_v<universe_type, sub_universe_type>) {
+        if(join(ask_tables[table_num][row][col], sub->project(headers[table_num][col])).is_top()) {
+          eliminated_rows[table_num].set(row)
+          has_changed.tell_top();
+        }
+      }
+      else {
+        VarEnv<standard_allocator> env;
+        auto f = ask_tables[table_num][j][col].deinterpret(headers[table_num][col], env);
+        IDiagnostics diagnostics;
+        sub_local_universe x{sub->project(headers[table_num][col])};
+        sub_local_universe::interpret_ask(f, env, x, diagnostics);
+        if(x.is_top()) {
+          eliminated_rows[table_num].set(row)
+          has_changed.tell_top();
+        }
+      }
     }
   }
+
+  CUDA size_t num_refinements() const {
+    size_t num = 0;
+    for(int i = 0; i < headers.size(); ++i) {
+      // One refinement per column.
+      num += headers[i].size();
+      // One refinement per cell.
+      num += headers[i].size() * tell_tables[i][0].size();
+    }
+    return num;
+  }
+
   template <class Mem>
-  CUDA void refine(BInc<Mem>& has_changed) {
-    // TODO
+  CUDA void refine(size_t i, BInc<Mem>& has_changed) {
+
   }
 
   template <class ExtractionStrategy = NonAtomicExtraction>
   CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
+    // Check all remaining row are entailed.
     return sub->is_extractable(strategy);
   }
 
