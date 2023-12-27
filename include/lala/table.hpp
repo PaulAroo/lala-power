@@ -67,6 +67,9 @@ private:
   table_collection_type tell_tables;
   table_collection_type ask_tables;
   battery::vector<bitset_type, allocator_type> eliminated_rows;
+  // See `refine`.
+  battery::vector<size_t, allocator_type> table_to_lrefine;
+  battery::vector<size_t, allocator_type> crefine_to_table;
 
 public:
   template <class Alloc>
@@ -121,6 +124,8 @@ public:
    , tell_tables(alloc)
    , ask_tables(alloc)
    , eliminated_rows(alloc)
+   , table_to_lrefine({0}, alloc)
+   , crefine_to_table(alloc)
   {}
 
   template<class A2, class U2, class Alloc2, class... Allocators>
@@ -131,6 +136,8 @@ public:
    , tell_tables(other.tell_tables, deps.template get_allocator<allocator_type>())
    , ask_tables(other.ask_tables, deps.template get_allocator<allocator_type>())
    , eliminated_rows(other.eliminated_rows, deps.template get_allocator<allocator_type>())
+   , table_to_lrefine(other.table_to_lrefine, deps.template get_allocator<allocator_type>())
+   , crefine_to_table(other.crefine_to_table, deps.template get_allocator<allocator_type>())
   {}
 
   CUDA AType aty() const {
@@ -180,7 +187,13 @@ public:
   template <class Alloc2>
   CUDA void restore(const snapshot_type<Alloc2>& snap) {
     sub->restore(snap.sub_snap);
+    table_to_lrefine.resize(snap.num_tables + 1);
     headers.resize(snap.num_tables);
+    size_t total_columns = 0;
+    for(int i = 0; i < headers.size(); ++i) {
+      total_columns += headers[i].size();
+    }
+    crefine_to_table.resize(total_columns);
     tell_tables.resize(snap.num_tables);
     ask_tables.resize(snap.num_tables);
     eliminated_rows.resize(snap.num_tables);
@@ -263,12 +276,16 @@ public:
 public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    if(headers.size() > 0) {
+    if(t.headers.size() > 0) {
       has_changed.tell_top();
     }
     sub->tell(t.sub_tell, has_changed);
     for(int i = 0; i < t.headers.size(); ++i) {
       headers.push_back(t.headers[i]);
+      for(int j = 0; j < headers[i].size(); ++j) {
+        crefine_to_table.push_back(i);
+      }
+      table_to_lrefine.push_back(table_to_lrefine.back() + t.tell_tables[i].size() * t.tell_tables[i][0].size());
       tell_tables.push_back(t.tell_tables[i]);
       ask_tables.push_back(t.ask_tables[i]);
       eliminated_rows.push_back(bitset_type(tell_tables.back()[0].size(), get_allocator()));
@@ -324,19 +341,21 @@ public:
   }
 
   CUDA size_t num_refinements() const {
-    size_t num = 0;
-    for(int i = 0; i < headers.size(); ++i) {
-      // One refinement per column.
-      num += headers[i].size();
-      // One refinement per cell.
-      num += headers[i].size() * tell_tables[i][0].size();
-    }
-    return num;
+    return
+      crefine_to_table.size() + // number of crefine (one per column).
+      table_to_lrefine.back(); // number of lrefine (one per cell).
   }
 
   template <class Mem>
   CUDA void refine(size_t i, BInc<Mem>& has_changed) {
-
+    if(i < crefine_to_table.size()) {
+      crefine(crefine_to_table[i], i % crefine_to_table[i], has_changed);
+    }
+    else {
+      size_t table_num = 0;
+      for(; table_num < table_to_lrefine.size() && table_to_lrefine[table_num] <= i; ++table_num) {}
+      lrefine(table_num, (i - table_to_lrefine[table_num - 1]) / tell_tables[table_num - 1][0].size(), (i - table_to_lrefine[table_num - 1]) % tell_tables[table_num - 1][0].size(), has_changed);
+    }
   }
 
   template <class ExtractionStrategy = NonAtomicExtraction>
