@@ -96,3 +96,33 @@ TEST(ITablesTest, SingleConstantTable2) {
   tables.subdomain()->tell(2, Itv(2,2));
   refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,2), Itv(2,2)}, {Itv(2,2), Itv(2,2), Itv(2,2)}, true);
 }
+
+TEST(ITablesTest, SingleConstantTable2MeetOp) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 0..10: x; var 1..4: y; var 0..3: z;\
+    constraint bool_or(bool_or(\
+      bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+      bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+      bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+  refine_and_test(tables, 3 + 3*3, {Itv(0,10), Itv(1,4), Itv(0,3)}, {Itv(1,3), Itv(1,3), Itv(1,3)}, false);
+}
+
+TEST(ITablesTest, SingleConstantTable2AskOp1) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 1..2: x; var 1..3: y; var 2..3: z;\
+    constraint bool_or(bool_or(\
+      bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+      bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+      bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+  refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,3), Itv(2,3)}, {Itv(2,2), Itv(2,2), Itv(2,2)}, true);
+}
+
+TEST(ITablesTest, SingleConstantTable2AskOp2) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 1..2: x; var 1..3: y; var 1..3: z;\
+    constraint bool_or(bool_or(\
+      bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+      bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+      bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+  refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,3), Itv(1,3)}, {Itv(1,2), Itv(1,2), Itv(1,2)}, false);
+}
