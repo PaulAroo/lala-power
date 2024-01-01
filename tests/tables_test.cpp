@@ -126,3 +126,90 @@ TEST(ITablesTest, SingleConstantTable2AskOp2) {
       bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
   refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,3), Itv(1,3)}, {Itv(1,2), Itv(1,2), Itv(1,2)}, false);
 }
+
+/** Just to try with the nary version of bool_and and bool_or. */
+TEST(ITablesTest, SingleConstantTable2b) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 1..3: x; var 1..3: y; var 1..3: z;\
+    constraint nbool_or(\
+      nbool_and(int_eq(x, 1), int_eq(y, 1), int_eq(z, 1)),\
+      nbool_and(int_eq(x, 2), int_eq(y, 2), int_eq(z, 2)),\
+      nbool_and(int_eq(x, 3), int_eq(y, 3), int_eq(z, 3)));");
+  refine_and_test(tables, 3 + 3*3, {Itv(1,3), Itv(1,3), Itv(1,3)});
+  tables.subdomain()->tell(1, Itv(1,2));
+  refine_and_test(tables, 3 + 3*3, {Itv(1,3), Itv(1,2), Itv(1,3)}, {Itv(1,2), Itv(1,2), Itv(1,2)}, false);
+  tables.subdomain()->tell(2, Itv(2,2));
+  refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,2), Itv(2,2)}, {Itv(2,2), Itv(2,2), Itv(2,2)}, true);
+}
+
+/**
+ *     x      y     z
+ *     *   [1..1] [1..1]
+ *  [2..2] [2..2] [2..2]
+ *  [3..3] [3..3]   *
+*/
+TEST(ITablesTest, SingleShortTable1) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 1..3: x; var 1..3: y; var 1..3: z;\
+    constraint bool_or(bool_or(\
+      bool_and(int_eq(y, 1), int_eq(z, 1)),\
+      bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+      bool_and(int_eq(x, 3), int_eq(y, 3)), true);");
+  refine_and_test(tables, 3 + 3*3, {Itv(1,3), Itv(1,3), Itv(1,3)});
+  tables.subdomain()->tell(2, Itv(1,2));
+  refine_and_test(tables, 3 + 3*3, {Itv(1,3), Itv(1,3), Itv(1,2)});
+  tables.subdomain()->tell(0, Itv(2,3));
+  refine_and_test(tables, 3 + 3*3, {Itv(2,3), Itv(1,3), Itv(1,2)});
+  tables.subdomain()->tell(1, Itv(1,1));
+  refine_and_test(tables, 3 + 3*3, {Itv(2,3), Itv(1,1), Itv(1,2)}, {Itv(2,3), Itv(1,1), Itv(1,1)}, true);
+}
+
+/**
+ *     x      y     z
+ *  [0..3] [1..3] [0..2]
+ *  [2..4] [1..4] [2..2]
+ *  [5..7] [1..9] [3..3]
+*/
+TEST(ITablesTest, SingleSmartTable1) {
+  ITables tables = create_and_interpret_and_tell<ITables>(
+    "var 0..8: x; var 0..8: y; var 0..8: z;\
+    constraint nbool_or(\
+      nbool_and(int_ge(x, 0), int_le(x, 1), int_ge(y, 1), int_le(y, 2), int_ge(z, 0), int_le(z, 2)),\
+      nbool_and(int_ge(x, 2), int_le(x, 4), int_ge(y, 1), int_le(y, 9), int_ge(z, 2), int_le(z, 2)),\
+      nbool_and(int_ge(x, 5), int_le(x, 7), int_ge(y, 1), int_le(y, 9), int_ge(z, 3), int_le(z, 3)));");
+  refine_and_test(tables, 3 + 3*3, {Itv(0,8), Itv(0,8), Itv(0,8)}, {Itv(0,7), Itv(1,8), Itv(0,3)}, false);
+  tables.subdomain()->tell(0, Itv(1,3));
+  refine_and_test(tables, 3 + 3*3, {Itv(1,3), Itv(1,8), Itv(0,3)}, {Itv(1,2), Itv(1,4), Itv(0,2)}, false);
+  // tables.subdomain()->tell(2, Itv(2,2));
+  // refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,2), Itv(2,2)}, {Itv(2,2), Itv(2,2), Itv(2,2)}, true);
+}
+
+// TEST(ITablesTest, SingleSmartTable1MeetOp) {
+//   ITables tables = create_and_interpret_and_tell<ITables>(
+//     "var 0..10: x; var 1..4: y; var 0..3: z;\
+//     constraint bool_or(bool_or(\
+//       bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+//       bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+//       bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+//   refine_and_test(tables, 3 + 3*3, {Itv(0,10), Itv(1,4), Itv(0,3)}, {Itv(1,3), Itv(1,3), Itv(1,3)}, false);
+// }
+
+// TEST(ITablesTest, SingleSmartTable1AskOp1) {
+//   ITables tables = create_and_interpret_and_tell<ITables>(
+//     "var 1..2: x; var 1..3: y; var 2..3: z;\
+//     constraint bool_or(bool_or(\
+//       bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+//       bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+//       bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+//   refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,3), Itv(2,3)}, {Itv(2,2), Itv(2,2), Itv(2,2)}, true);
+// }
+
+// TEST(ITablesTest, SingleSmartTable1AskOp2) {
+//   ITables tables = create_and_interpret_and_tell<ITables>(
+//     "var 1..2: x; var 1..3: y; var 1..3: z;\
+//     constraint bool_or(bool_or(\
+//       bool_and(int_eq(x, 1), bool_and(int_eq(y, 1), int_eq(z, 1))),\
+//       bool_and(int_eq(x, 2), bool_and(int_eq(y, 2), int_eq(z, 2)))),\
+//       bool_and(int_eq(x, 3), bool_and(int_eq(y, 3), int_eq(z, 3))), true);");
+//   refine_and_test(tables, 3 + 3*3, {Itv(1,2), Itv(1,3), Itv(1,3)}, {Itv(1,2), Itv(1,2), Itv(1,2)}, false);
+// }
