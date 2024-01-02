@@ -1,7 +1,7 @@
-// Copyright 2022 Pierre Talbot
+// Copyright 2023 Pierre Talbot
 
-#ifndef LALA_POWER_SEARCH_TREE_HPP
-#define LALA_POWER_SEARCH_TREE_HPP
+#ifndef LALA_POWER_TABLES_HPP
+#define LALA_POWER_TABLES_HPP
 
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"
@@ -319,8 +319,8 @@ public:
       }
       local_universe tell_u{local_universe::bot()};
       local_universe ask_u{local_universe::bot()};
-      if( local_universe::template interpret_tell<diagnose>(f, env, tell_u, diagnostics)
-        && local_universe::template interpret_ask<diagnose>(f, env, ask_u, diagnostics))
+      if(  ginterpret_in<IKind::TELL, diagnose>(f, env, tell_u, diagnostics)
+        && ginterpret_in<IKind::ASK, diagnose>(f, env, ask_u, diagnostics))
       {
         tell_table.back()[idx].tell(tell_u);
         ask_table.back()[idx].tell(ask_u);
@@ -347,14 +347,24 @@ public:
         if(f.seq(i).is(F::Seq) && f.seq(i).sig() == AND) {
           const auto& row = f.seq(i).seq();
           for(int j = 0; j < row.size(); ++j) {
+            size_t error_ctx = diagnostics.num_suberrors();
             if(!interpret_atom<diagnose>(header, tell_table, ask_table, row[j], env, diagnostics)) {
-              return false;
+              if(!sub->template interpret_tell<diagnose>(f2, env, tell.sub_tell, diagnostics)) {
+                return false;
+              }
+              diagnostics.merge(true, error_ctx);
+              return true;
             }
           }
         }
         else {
+          size_t error_ctx = diagnostics.num_suberrors();
           if(!interpret_atom<diagnose>(header, tell_table, ask_table, f.seq(i), env, diagnostics)) {
-            return false;
+            if(!sub->template interpret_tell<diagnose>(f2, env, tell.sub_tell, diagnostics)) {
+              return false;
+            }
+            diagnostics.merge(true, error_ctx);
+            return true;
           }
         }
       }
@@ -383,7 +393,7 @@ public:
     }
   }
 
-  CUDA const universe_type& operator[](int x) const {
+  CUDA const sub_universe_type& operator[](int x) const {
     return (*sub)[x];
   }
 
@@ -391,6 +401,23 @@ public:
     return sub->vars();
   }
 
+private:
+  template <IKind kind>
+  CUDA sub_local_universe convert(const local_universe& x) const {
+    if constexpr(std::is_same_v<universe_type, sub_universe_type>) {
+      return x;
+    }
+    else {
+      VarEnv<battery::standard_allocator> env;
+      IDiagnostics diagnostics;
+      sub_local_universe v{sub_local_universe::bot()};
+      bool succeed = ginterpret_in<kind>(x.deinterpret(AVar{}, env), env, v, diagnostics);
+      assert(succeed);
+      return v;
+    }
+  }
+
+public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
     if(t.headers.size() > 0) {
@@ -416,18 +443,7 @@ public:
     sub_local_universe u{sub_local_universe::top()};
     for(int j = 0; j < tell_tables[table_num].size(); ++j) {
       if(!eliminated_rows[table_num].test(j)) {
-        if constexpr(std::is_same_v<universe_type, sub_universe_type>) {
-          u.dtell(tell_tables[table_num][j][col]);
-        }
-        else {
-          VarEnv<standard_allocator> env;
-          auto f = tell_tables[table_num][j][col].deinterpret(headers[table_num][col], env);
-          IDiagnostics diagnostics;
-          sub_local_universe v{sub_local_universe::bot()};
-          if(sub_local_universe::interpret_tell(f, env, v, diagnostics)) {
-            u.dtell(v);
-          }
-        }
+        u.dtell(convert<IKind::TELL>(tell_tables[table_num][j][col]));
       }
     }
     sub->tell(headers[table_num][col], u, has_changed);
@@ -438,28 +454,16 @@ public:
   {
     if(!eliminated_rows[table_num].test(row))
     {
-      if constexpr(std::is_same_v<universe_type, sub_universe_type>) {
-        if(join(ask_tables[table_num][row][col], sub->project(headers[table_num][col])).is_top()) {
-          eliminated_rows[table_num].set(row);
-          has_changed.tell_top();
-        }
-      }
-      else {
-        VarEnv<standard_allocator> env;
-        auto f = ask_tables[table_num][row][col].deinterpret(headers[table_num][col], env);
-        IDiagnostics diagnostics;
-        sub_local_universe x{sub->project(headers[table_num][col])};
-        sub_local_universe::interpret_ask(f, env, x, diagnostics);
-        if(x.is_top()) {
-          eliminated_rows[table_num].set(row);
-          has_changed.tell_top();
-        }
+      if(join(convert<IKind::ASK>(ask_tables[table_num][row][col]), sub->project(headers[table_num][col])).is_top()) {
+        eliminated_rows[table_num].set(row);
+        has_changed.tell_top();
       }
     }
   }
 
   CUDA size_t num_refinements() const {
     return
+      sub->num_refinements() +
       column_to_table_idx.size() + // number of crefine (one per column).
       total_cells; // number of lrefine (one per cell).
   }
@@ -467,21 +471,27 @@ public:
   template <class Mem>
   CUDA void refine(size_t i, BInc<Mem>& has_changed) {
     assert(i < num_refinements());
-    if(i < column_to_table_idx.size()) {
-      crefine(column_to_table_idx[i], i - table_idx_to_column[column_to_table_idx[i]], has_changed);
+    if(i < sub->num_refinements()) {
+      sub->refine(i, has_changed);
     }
     else {
-      i -= column_to_table_idx.size();
-      size_t table_num = 0;
-      bool unfinished = true;
-      // This loop computes the table number of the cell `i`, we avoid stopping the loop earlier to avoid thread divergence.
-      for(int j = 0; j < tell_tables.size(); ++j) {
-        size_t dim_table = tell_tables[j].size() * tell_tables[j][0].size();
-        unfinished &= (i >= dim_table);
-        i -= unfinished * dim_table;
-        table_num += unfinished;
+      i -= sub->num_refinements();
+      if(i < column_to_table_idx.size()) {
+        crefine(column_to_table_idx[i], i - table_idx_to_column[column_to_table_idx[i]], has_changed);
       }
-      lrefine(table_num, i / tell_tables[table_num][0].size(), i % tell_tables[table_num][0].size(), has_changed);
+      else {
+        i -= column_to_table_idx.size();
+        size_t table_num = 0;
+        bool unfinished = true;
+        // This loop computes the table number of the cell `i`, we avoid stopping the loop earlier to avoid thread divergence.
+        for(int j = 0; j < tell_tables.size(); ++j) {
+          size_t dim_table = tell_tables[j].size() * tell_tables[j][0].size();
+          unfinished &= (i >= dim_table);
+          i -= unfinished * dim_table;
+          table_num += unfinished;
+        }
+        lrefine(table_num, i / tell_tables[table_num][0].size(), i % tell_tables[table_num][0].size(), has_changed);
+      }
     }
   }
 
@@ -493,7 +503,7 @@ public:
         if(!eliminated_rows[i].test(j)) {
           bool entailed = true;
           for(int k = 0; k < ask_tables[i][j].size(); ++k) {
-            entailed &= sub->project(headers[i][k]) >= ask_tables[i][j][k];
+            entailed &= sub->project(headers[i][k]) >= convert<IKind::ASK>(ask_tables[i][j][k]);
           }
           if(!entailed) {
             return false;
@@ -516,7 +526,7 @@ public:
     }
   }
 
-  CUDA universe_type project(AVar x) const {
+  CUDA sub_universe_type project(AVar x) const {
     return sub->project(x);
   }
 
@@ -526,12 +536,10 @@ public:
     F sub_f = sub->deinterpret(env);
     typename F::Sequence seq{env.get_allocator()};
     if(sub_f.is(F::Seq) && sub_f.sig() == AND) {
-      for(int i = 0; i < sub_f.seq().size(); ++i) {
-        seq.push_back(sub_f.seq(i));
-      }
+      seq = std::move(sub_f.seq());
     }
     else {
-      seq.push_back(sub_f);
+      seq.push_back(std::move(sub_f));
     }
     for(int i = 0; i < headers.size(); ++i) {
       typename F::Sequence disjuncts{env.get_allocator()};
