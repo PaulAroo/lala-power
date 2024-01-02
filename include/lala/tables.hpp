@@ -453,6 +453,10 @@ public:
     return sub->vars();
   }
 
+  CUDA size_t num_tables() const {
+    return tell_tables.size();
+  }
+
 private:
   template <IKind kind>
   CUDA sub_local_universe convert(const local_universe& x) const {
