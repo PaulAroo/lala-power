@@ -266,6 +266,7 @@ public:
     CUDA snapshot_type(const SnapshotType& other, const Alloc2& alloc = Alloc2())
       : sub_snap(other.sub_snap, alloc)
       , num_tables(other.num_tables)
+      , total_cells(other.total_cells)
     {}
 
     CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables, size_t total_cells)
