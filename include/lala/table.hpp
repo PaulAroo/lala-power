@@ -12,24 +12,24 @@
 
 namespace lala {
 
-template <class A, class U, class Alloc> class Tables;
+template <class A, class U, class Alloc> class Table;
 namespace impl {
   template <class>
   struct is_table_like {
     static constexpr bool value = false;
   };
   template<class A, class U, class Alloc>
-  struct is_table_like<Tables<A, U, Alloc>> {
+  struct is_table_like<Table<A, U, Alloc>> {
     static constexpr bool value = true;
   };
 }
 
-/** The tables abstract domain is designed to represent predicates in extension by listing all their solutions explicitly.
+/** The table abstract domain is designed to represent predicates in extension by listing all their solutions explicitly.
  * It is inspired by the table global constraint and generalizes it by lifting each element of the table to a lattice element.
  * We expect `U` to be equally or less expressive than `A::universe_type`, this is because we compute the meet in `A::universe_type` and not in `U`.
  */
 template <class A, class U = typename A::universe_type, class Allocator = typename A::allocator_type>
-class Tables {
+class Table {
 public:
   using allocator_type = Allocator;
   using sub_allocator_type = typename A::allocator_type;
@@ -40,7 +40,7 @@ public:
   using memory_type = typename universe_type::memory_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
-  using this_type = Tables<sub_type, universe_type, allocator_type>;
+  using this_type = Table<sub_type, universe_type, allocator_type>;
 
   constexpr static const bool is_abstract_universe = false;
   constexpr static const bool sequential = sub_type::sequential;
@@ -52,12 +52,9 @@ public:
   constexpr static const bool preserve_meet = sub_type::preserve_meet;
   constexpr static const bool injective_concretization = sub_type::injective_concretization;
   constexpr static const bool preserve_concrete_covers = sub_type::preserve_concrete_covers;
-  constexpr static const char* name = "Tables";
+  constexpr static const char* name = "Table";
 
-  using table_type = battery::vector<
-    battery::vector<universe_type, allocator_type>,
-    allocator_type>;
-  using table_collection_type = battery::vector<table_type, allocator_type>;
+  using table_type = battery::vector<universe_type, allocator_type>;
   using bitset_type = battery::dynamic_bitset<memory_type, allocator_type>;
 
 private:
@@ -65,14 +62,11 @@ private:
   AType store_aty;
   sub_ptr sub;
 
+  // For each instance `i` of the table, we have its set of variables `headers[i]`.
   battery::vector<battery::vector<AVar, allocator_type>, allocator_type> headers;
-  table_collection_type tell_tables;
-  table_collection_type ask_tables;
+  table_type tell_table;
+  table_type ask_table;
   battery::vector<bitset_type, allocator_type> eliminated_rows;
-  // See `refine`.
-  battery::vector<size_t, allocator_type> table_idx_to_column;
-  battery::vector<size_t, allocator_type> column_to_table_idx;
-  size_t total_cells;
 
 public:
   template <class Alloc>
@@ -83,19 +77,14 @@ public:
 
     battery::vector<battery::vector<AVar, Alloc>, Alloc> headers;
 
-    battery::vector<battery::vector<
-      battery::vector<universe_type, Alloc>,
-    Alloc>, Alloc> tell_tables;
-
-    battery::vector<battery::vector<
-      battery::vector<universe_type, Alloc>,
-    Alloc>, Alloc> ask_tables;
+    battery::vector<universe_type, Alloc> tell_table;
+    battery::vector<universe_type, Alloc> ask_table;
 
     CUDA tell_type(const Alloc& alloc = Alloc{})
      : sub(alloc)
      , headers(alloc)
-     , tell_tables(alloc)
-     , ask_tables(alloc)
+     , tell_table(alloc)
+     , ask_table(alloc)
     {}
     tell_type(const tell_type&) = default;
     tell_type(tell_type&&) = default;
@@ -106,8 +95,8 @@ public:
     CUDA NI tell_type(const TableTellType& other, const Alloc& alloc = Alloc{})
       : sub(other.sub, alloc)
       , headers(other.headers, alloc)
-      , tell_tables(other.tell_tables, alloc)
-      , ask_tables(other.ask_tables, alloc)
+      , tell_table(other.tell_table, alloc)
+      , ask_table(other.ask_table, alloc)
     {}
 
     CUDA allocator_type get_allocator() const {
@@ -124,14 +113,12 @@ public:
 
     typename A::template ask_type<Alloc> sub;
     battery::vector<battery::vector<AVar, Alloc>, Alloc> headers;
-    battery::vector<battery::vector<
-      battery::vector<universe_type, Alloc>,
-    Alloc>, Alloc> ask_tables;
+    battery::vector<universe_type, Alloc> ask_table;
 
     CUDA ask_type(const Alloc& alloc = Alloc{})
      : sub(alloc)
      , headers(alloc)
-     , ask_tables(alloc)
+     , ask_table(alloc)
     {}
     ask_type(const ask_type&) = default;
     ask_type(ask_type&&) = default;
@@ -142,7 +129,7 @@ public:
     CUDA NI ask_type(const TableAskType& other, const Alloc& alloc = Alloc{})
       : sub(other.sub, alloc)
       , headers(other.headers, alloc)
-      , ask_tables(other.ask_tables, alloc)
+      , ask_table(other.ask_table, alloc)
     {}
 
     CUDA allocator_type get_allocator() const {
@@ -154,38 +141,32 @@ public:
   };
 
   template <class A2, class U2, class Alloc2>
-  friend class Tables;
+  friend class Table;
 
 public:
-  CUDA Tables(AType uid, AType store_aty, sub_ptr sub, const allocator_type& alloc = allocator_type())
+  CUDA Table(AType uid, AType store_aty, sub_ptr sub, const allocator_type& alloc = allocator_type())
    : atype(uid)
    , store_aty(store_aty)
    , sub(std::move(sub))
    , headers(alloc)
-   , tell_tables(alloc)
-   , ask_tables(alloc)
+   , tell_table(alloc)
+   , ask_table(alloc)
    , eliminated_rows(alloc)
-   , table_idx_to_column({0}, alloc)
-   , column_to_table_idx(alloc)
-   , total_cells(0)
   {}
 
-  CUDA Tables(AType uid, sub_ptr sub, const allocator_type& alloc = allocator_type())
-   : Tables(uid, sub->aty(), sub, alloc)
+  CUDA Table(AType uid, sub_ptr sub, const allocator_type& alloc = allocator_type())
+   : Table(uid, sub->aty(), sub, alloc)
   {}
 
   template<class A2, class U2, class Alloc2, class... Allocators>
-  CUDA NI Tables(const Tables<A2, U2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
+  CUDA NI Table(const Table<A2, U2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype)
    , store_aty(other.store_aty)
    , sub(deps.template clone<sub_type>(other.sub))
    , headers(other.headers, deps.template get_allocator<allocator_type>())
-   , tell_tables(other.tell_tables, deps.template get_allocator<allocator_type>())
-   , ask_tables(other.ask_tables, deps.template get_allocator<allocator_type>())
+   , tell_table(other.tell_table, deps.template get_allocator<allocator_type>())
+   , ask_table(other.ask_table, deps.template get_allocator<allocator_type>())
    , eliminated_rows(other.eliminated_rows, deps.template get_allocator<allocator_type>())
-   , table_idx_to_column(other.table_idx_to_column, deps.template get_allocator<allocator_type>())
-   , column_to_table_idx(other.column_to_table_idx, deps.template get_allocator<allocator_type>())
-   , total_cells(other.total_cells)
   {}
 
   CUDA AType aty() const {
@@ -201,12 +182,12 @@ public:
   }
 
   CUDA local::BDec is_bot() const {
-    return tell_tables.size() == 0 && sub->is_bot();
+    return tell_table.size() == 0 && sub->is_bot();
   }
 
   CUDA local::BInc is_top() const {
     for(int i = 0; i < eliminated_rows.size(); ++i) {
-      if(eliminated_rows[i].count() == tell_tables[i].size()) {
+      if(eliminated_rows[i].count() == tell_table.size()) {
         return true;
       }
     }
@@ -218,7 +199,7 @@ public:
     const allocator_type& alloc = allocator_type(),
     const sub_allocator_type& sub_alloc = sub_allocator_type())
   {
-    return Tables{atype, battery::allocate_shared<sub_type>(alloc, sub_type::bot(atype_sub, sub_alloc)), alloc};
+    return Table{atype, battery::allocate_shared<sub_type>(alloc, sub_type::bot(atype_sub, sub_alloc)), alloc};
   }
 
   /** A special symbolic element representing top. */
@@ -227,7 +208,7 @@ public:
     const allocator_type& alloc = allocator_type(),
     const sub_allocator_type& sub_alloc = sub_allocator_type())
   {
-    return Tables{atype, battery::allocate_shared<sub_type>(sub_alloc, sub_type::top(atype_sub, sub_alloc)), alloc};
+    return Table{atype, battery::allocate_shared<sub_type>(sub_alloc, sub_type::top(atype_sub, sub_alloc)), alloc};
   }
 
   template <class Env>
@@ -255,7 +236,6 @@ public:
     using sub_snap_type = sub_type::template snapshot_type<Alloc2>;
     sub_snap_type sub_snap;
     size_t num_tables;
-    size_t total_cells;
 
     snapshot_type(const snapshot_type<Alloc2>&) = default;
     snapshot_type(snapshot_type<Alloc2>&&) = default;
@@ -266,30 +246,27 @@ public:
     CUDA snapshot_type(const SnapshotType& other, const Alloc2& alloc = Alloc2())
       : sub_snap(other.sub_snap, alloc)
       , num_tables(other.num_tables)
-      , total_cells(other.total_cells)
     {}
 
-    CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables, size_t total_cells)
+    CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables)
       : sub_snap(std::move(sub_snap))
       , num_tables(num_tables)
-      , total_cells(total_cells)
     {}
   };
 
   template <class Alloc2 = allocator_type>
   CUDA snapshot_type<Alloc2> snapshot(const Alloc2& alloc = Alloc2()) const {
-    return snapshot_type<Alloc2>(sub->snapshot(alloc), headers.size(), total_cells);
+    return snapshot_type<Alloc2>(sub->snapshot(alloc), headers.size());
   }
 
   template <class Alloc2>
   CUDA void restore(const snapshot_type<Alloc2>& snap) {
     sub->restore(snap.sub_snap);
-    total_cells = snap.total_cells;
-    table_idx_to_column.resize(snap.num_tables + 1);
     headers.resize(snap.num_tables);
-    column_to_table_idx.resize(table_idx_to_column.back());
-    tell_tables.resize(snap.num_tables);
-    ask_tables.resize(snap.num_tables);
+    if(snap.num_tables == 0) {
+      tell_table.resize(0);
+      ask_table.resize(0);
+    }
     eliminated_rows.resize(snap.num_tables);
     for(int i = 0; i < eliminated_rows.size(); ++i) {
       eliminated_rows[i].reset();
@@ -342,8 +319,8 @@ public:
   template <IKind kind, bool diagnose = false, class F, class Env, class Alloc>
   CUDA NI bool interpret_atom(
     battery::vector<AVar, Alloc>& header,
-    battery::vector<battery::vector<local_universe, Alloc>, Alloc>& tell_table,
-    battery::vector<battery::vector<local_universe, Alloc>, Alloc>& ask_table,
+    battery::vector<battery::vector<local_universe, Alloc>, Alloc>& tell_table2,
+    battery::vector<battery::vector<local_universe, Alloc>, Alloc>& ask_table2,
     const F& f, Env& env, IDiagnostics& diagnostics) const
   {
     if(num_vars(f) != 1) {
@@ -360,20 +337,20 @@ public:
       // If it's a new variable not present in the previous rows, we add it in each row with bottom value.
       if(idx == header.size()) {
         header.push_back(x);
-        for(int i = 0; i < tell_table.size(); ++i) {
+        for(int i = 0; i < tell_table2.size(); ++i) {
           if constexpr(kind == IKind::TELL) {
-            tell_table[i].push_back(local_universe::bot());
+            tell_table2[i].push_back(local_universe::bot());
           }
-          ask_table[i].push_back(local_universe::bot());
+          ask_table2[i].push_back(local_universe::bot());
         }
       }
       local_universe ask_u{local_universe::bot()};
       if(ginterpret_in<IKind::ASK, diagnose>(f, env, ask_u, diagnostics)) {
-        ask_table.back()[idx].tell(ask_u);
+        ask_table2.back()[idx].tell(ask_u);
         if constexpr(kind == IKind::TELL) {
           local_universe tell_u{local_universe::bot()};
           if(ginterpret_in<IKind::TELL, diagnose>(f, env, tell_u, diagnostics)) {
-            tell_table.back()[idx].tell(tell_u);
+            tell_table2.back()[idx].tell(tell_u);
           }
           else {
             return false;
@@ -387,6 +364,21 @@ public:
     return true;
   }
 
+  template <class Alloc1, class Alloc2>
+  CUDA battery::vector<local_universe, Alloc2> flatten_table(
+    const battery::vector<battery::vector<local_universe, Alloc1>, Alloc1>& table, const Alloc2& alloc) const
+  {
+    if(table.size() == 0) { return battery::vector<local_universe, Alloc2>(alloc);}
+    battery::vector<local_universe, Alloc2> res(alloc);
+    res.reserve(table.size() * table[0].size());
+    for(int i = 0; i < table.size(); ++i) {
+      for(int j = 0; j < table[i].size(); ++j) {
+        res.push_back(table[i][j]);
+      }
+    }
+    return std::move(res);
+  }
+
 public:
   template <IKind kind, bool diagnose = false, class F, class Env, class I>
   CUDA NI bool interpret(const F& f2, Env& env, I& intermediate, IDiagnostics& diagnostics) const {
@@ -394,17 +386,17 @@ public:
     using Alloc = typename I::allocator_type;
     if(f.is(F::Seq) && f.sig() == OR) {
       battery::vector<AVar, Alloc> header(intermediate.get_allocator());
-      battery::vector<battery::vector<local_universe, Alloc>, Alloc> tell_table(intermediate.get_allocator());
-      battery::vector<battery::vector<local_universe, Alloc>, Alloc> ask_table(intermediate.get_allocator());
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> tell_table2(intermediate.get_allocator());
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> ask_table2(intermediate.get_allocator());
       for(int i = 0; i < f.seq().size(); ++i) {
         // Add a row in the table.
-        tell_table.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), intermediate.get_allocator()));
-        ask_table.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), intermediate.get_allocator()));
+        tell_table2.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), intermediate.get_allocator()));
+        ask_table2.push_back(battery::vector<local_universe, Alloc>(header.size(), local_universe::bot(), intermediate.get_allocator()));
         if(f.seq(i).is(F::Seq) && f.seq(i).sig() == AND) {
           const auto& row = f.seq(i).seq();
           for(int j = 0; j < row.size(); ++j) {
             size_t error_ctx = diagnostics.num_suberrors();
-            if(!interpret_atom<kind, diagnose>(header, tell_table, ask_table, row[j], env, diagnostics)) {
+            if(!interpret_atom<kind, diagnose>(header, tell_table2, ask_table2, row[j], env, diagnostics)) {
               if(!sub->template interpret<kind, diagnose>(f2, env, intermediate.sub, diagnostics)) {
                 return false;
               }
@@ -415,7 +407,7 @@ public:
         }
         else {
           size_t error_ctx = diagnostics.num_suberrors();
-          if(!interpret_atom<kind, diagnose>(header, tell_table, ask_table, f.seq(i), env, diagnostics)) {
+          if(!interpret_atom<kind, diagnose>(header, tell_table2, ask_table2, f.seq(i), env, diagnostics)) {
             if(!sub->template interpret<kind, diagnose>(f2, env, intermediate.sub, diagnostics)) {
               return false;
             }
@@ -424,16 +416,27 @@ public:
           }
         }
       }
-      intermediate.headers.push_back(std::move(header));
-      if constexpr(kind == IKind::TELL) {
-        intermediate.tell_tables.push_back(std::move(tell_table));
+      // When only one variable is present, we leave its interpretation to the subdomain.
+      if(header.size() > 1) {
+        auto ask_table2_flatten = flatten_table(ask_table2, ask_table2.get_allocator());
+        if((intermediate.ask_table.size() == 0 || intermediate.ask_table == ask_table2_flatten) &&
+          (ask_table.size() == 0 || ask_table == ask_table2_flatten))
+        {
+          intermediate.headers.push_back(std::move(header));
+          if(intermediate.ask_table.size() == 0 && ask_table.size() == 0) {
+            if constexpr(kind == IKind::TELL) {
+              intermediate.tell_table = flatten_table(tell_table2, tell_table2.get_allocator());
+            }
+            intermediate.ask_table = std::move(ask_table2_flatten);
+          }
+          return true;
+        }
+        else {
+          RETURN_INTERPRETATION_ERROR("This abstract domain can only represent multiple tables over a same matrix of values, but a difference was detected.");
+        }
       }
-      intermediate.ask_tables.push_back(std::move(ask_table));
-      return true;
     }
-    else {
-      return sub->template interpret<kind, diagnose>(f, env, intermediate.sub, diagnostics);
-    }
+    return sub->template interpret<kind, diagnose>(f, env, intermediate.sub, diagnostics);
   }
 
   template <bool diagnose = false, class F, class Env, class Alloc>
@@ -474,6 +477,14 @@ private:
     }
   }
 
+  CUDA size_t num_columns() const {
+    return headers[0].size();
+  }
+
+  CUDA size_t num_rows() const {
+    return tell_table.size() / num_columns();
+  }
+
 public:
   template <class Alloc, class Mem>
   CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
@@ -481,16 +492,18 @@ public:
       has_changed.tell_top();
     }
     sub->tell(t.sub, has_changed);
+    // If there is a table in the tell, we add it to the current abstract element.
+    if(t.tell_table.size() > 0) {
+      // Since this abstract element only handle one matrix of elements at a time, the current table must be empty.
+      assert(tell_table.size() == 0);
+      tell_table = t.tell_table;
+      ask_table = t.ask_table;
+    }
+    // For each new table (sharing the matrix of elements).
     for(int i = 0; i < t.headers.size(); ++i) {
+      // Each table must have the same number of columns.
       headers.push_back(battery::vector<AVar, allocator_type>(t.headers[i], get_allocator()));
-      for(int j = 0; j < headers[i].size(); ++j) {
-        column_to_table_idx.push_back(i);
-      }
-      table_idx_to_column.push_back(table_idx_to_column.back() + t.tell_tables[i][0].size());
-      tell_tables.push_back(table_type(t.tell_tables[i], get_allocator()));
-      ask_tables.push_back(table_type(t.ask_tables[i], get_allocator()));
-      eliminated_rows.push_back(bitset_type(tell_tables.back().size(), get_allocator()));
-      total_cells += tell_tables.back().size() * tell_tables.back()[0].size();
+      eliminated_rows.push_back(bitset_type(num_rows(), get_allocator()));
     }
     return *this;
   }
@@ -512,28 +525,27 @@ public:
     return *this;
   }
 
+  CUDA size_t to1D(int i, int j) const { return i *  num_columns() + j; }
+
 private:
   template <class Alloc>
-  CUDA local::BInc ask(const battery::vector<battery::vector<AVar, Alloc>, Alloc>& header,
-   const battery::vector<battery::vector<battery::vector<universe_type, Alloc>, Alloc>, Alloc>& ask_tables) const
+  CUDA local::BInc ask(const battery::vector<battery::vector<AVar, Alloc>, Alloc>& headers) const
   {
-    for(int i = 0; i < ask_tables.size(); ++i) {
-      bool table_entailed = false;
-      for(int j = 0; j < ask_tables[i].size() && !table_entailed; ++j) {
-        bool row_entailed = true;
-        for(int k = 0; k < ask_tables[i][j].size(); ++k) {
-          if(!(sub->project(headers[i][k]) >= convert<IKind::ASK>(ask_tables[i][j][k]))) {
+    for(int i = 0; i < headers.size(); ++i) {
+      bool row_entailed = false;
+      for(int j = 0; j < num_rows(); ++j) {
+        row_entailed = true;
+        for(int k = 0; k <  num_columns(); ++k) {
+          if(!(sub->project(headers[i][k]) >= convert<IKind::ASK>(ask_table[to1D(j,k)]))) {
             row_entailed = false;
             break;
           }
         }
         if(row_entailed) {
-          table_entailed = true;
+          break;
         }
       }
-      if(!table_entailed) {
-        return false;
-      }
+      if(!row_entailed) { return false; }
     }
     return true;
   }
@@ -541,37 +553,31 @@ private:
 public:
   template <class Alloc>
   CUDA local::BInc ask(const ask_type<Alloc>& a) const {
-    return ask(a.headers, a.ask_tables) && sub->ask(a.sub);
+    return ask(a.headers) && sub->ask(a.sub);
   }
 
+private:
   template <class Mem>
-  CUDA void crefine(size_t table_num, size_t col, BInc<Mem>& has_changed) {
+  CUDA void refine(size_t table_num, size_t col, BInc<Mem>& has_changed) {
     sub_local_universe u{sub_local_universe::top()};
-    for(int j = 0; j < tell_tables[table_num].size(); ++j) {
+    for(int j = 0; j < num_rows(); ++j) {
       if(!eliminated_rows[table_num].test(j)) {
-        u.dtell(convert<IKind::TELL>(tell_tables[table_num][j][col]));
+        auto r = convert<IKind::TELL>(tell_table[to1D(j,col)]);
+        u.dtell(r);
+        if(join(r, sub->project(headers[table_num][col])).is_top()) {
+          eliminated_rows[table_num].set(j);
+          has_changed.tell_top();
+        }
       }
     }
     sub->tell(headers[table_num][col], u, has_changed);
   }
 
-  template <class Mem>
-  CUDA void lrefine(size_t table_num, size_t row, size_t col, BInc<Mem>& has_changed)
-  {
-    if(!eliminated_rows[table_num].test(row))
-    {
-      if(join(convert<IKind::TELL>(tell_tables[table_num][row][col]), sub->project(headers[table_num][col])).is_top()) {
-        eliminated_rows[table_num].set(row);
-        has_changed.tell_top();
-      }
-    }
-  }
-
+public:
   CUDA size_t num_refinements() const {
     return
       sub->num_refinements() +
-      column_to_table_idx.size() + // number of crefine (one per column).
-      total_cells; // number of lrefine (one per cell).
+      headers.size() * num_columns();
   }
 
   template <class Mem>
@@ -582,29 +588,15 @@ public:
     }
     else {
       i -= sub->num_refinements();
-      if(i < column_to_table_idx.size()) {
-        crefine(column_to_table_idx[i], i - table_idx_to_column[column_to_table_idx[i]], has_changed);
-      }
-      else {
-        i -= column_to_table_idx.size();
-        size_t table_num = 0;
-        bool unfinished = true;
-        // This loop computes the table number of the cell `i`, we avoid stopping the loop earlier to avoid thread divergence.
-        for(int j = 0; j < tell_tables.size(); ++j) {
-          size_t dim_table = tell_tables[j].size() * tell_tables[j][0].size();
-          unfinished &= (i >= dim_table);
-          i -= (unfinished ? dim_table : 0);
-          table_num += (unfinished ? 1 : 0);
-        }
-        lrefine(table_num, i / tell_tables[table_num][0].size(), i % tell_tables[table_num][0].size(), has_changed);
-      }
+      // refine(i /  num_columns(), i %  num_columns(), has_changed);
+      refine(i % headers.size(), i / headers.size(), has_changed);
     }
   }
 
   template <class ExtractionStrategy = NonAtomicExtraction>
   CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
     // Check all remaining row are entailed.
-    return ask(headers, ask_tables) && sub->is_extractable(strategy);
+    return ask(headers) && sub->is_extractable(strategy);
   }
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
@@ -636,12 +628,12 @@ public:
     }
     for(int i = 0; i < headers.size(); ++i) {
       typename F::Sequence disjuncts{env.get_allocator()};
-      for(int j = 0; j < tell_tables[i].size(); ++j) {
+      for(int j = 0; j < num_rows(); ++j) {
         if(!eliminated_rows[i].test(j)) {
           typename F::Sequence conjuncts{env.get_allocator()};
-          for(int k = 0; k < tell_tables[i][j].size(); ++k) {
-            if(!(sub->project(headers[i][k]) >= convert<IKind::ASK>(ask_tables[i][j][k]))) {
-              conjuncts.push_back(tell_tables[i][j][k].deinterpret(headers[i][k], env));
+          for(int k = 0; k < num_columns(); ++k) {
+            if(!(sub->project(headers[i][k]) >= convert<IKind::ASK>(ask_table[to1D(j,k)]))) {
+              conjuncts.push_back(tell_table[to1D(j,k)].deinterpret(headers[i][k], env));
             }
           }
           disjuncts.push_back(F::make_nary(AND, std::move(conjuncts), aty()));
