@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 cmake_policy(SET CMP0135 NEW)
 
-if("$ENV{CUDAARCHS}" STREQUAL "")
-  set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "Targeted CUDA architectures")
-endif()
+set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "Targeted CUDA architectures")
 
 if(MSVC)
   set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Available configuration types to select")
