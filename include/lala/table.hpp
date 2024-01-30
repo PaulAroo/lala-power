@@ -561,13 +561,13 @@ private:
   CUDA void refine(size_t table_num, size_t col, BInc<Mem>& has_changed) {
     sub_local_universe u{sub_local_universe::top()};
     for(int j = 0; j < num_rows(); ++j) {
-      if(!eliminated_rows[table_num].test(j)) {
-        auto r = convert<IKind::TELL>(tell_table[to1D(j,col)]);
+      auto r = convert<IKind::TELL>(tell_table[to1D(j,col)]);
+      if(join(r, sub->project(headers[table_num][col])).is_top()) {
+        eliminated_rows[table_num].set(j);
+        has_changed.tell_top();
+      }
+      else if(!eliminated_rows[table_num].test(j)) {
         u.dtell(r);
-        if(join(r, sub->project(headers[table_num][col])).is_top()) {
-          eliminated_rows[table_num].set(j);
-          has_changed.tell_top();
-        }
       }
     }
     sub->tell(headers[table_num][col], u, has_changed);
