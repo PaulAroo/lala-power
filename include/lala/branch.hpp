@@ -33,7 +33,7 @@ public:
    : children(branch.children, alloc), current_idx(branch.current_idx) {}
 
   CUDA int size() const {
-    return children.size();
+    return static_cast<int>(children.size()/*size_t*/);
   }
 
   CUDA const tell_type& next() {
