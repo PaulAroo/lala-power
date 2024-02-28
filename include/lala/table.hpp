@@ -562,12 +562,14 @@ private:
     sub_local_universe u{sub_local_universe::top()};
     for(int j = 0; j < num_rows(); ++j) {
       auto r = convert<IKind::TELL>(tell_table[to1D(j,col)]);
-      if(join(r, sub->project(headers[table_num][col])).is_top()) {
-        eliminated_rows[table_num].set(j);
-        has_changed.tell_top();
-      }
-      else if(!eliminated_rows[table_num].test(j)) {
-        u.dtell(r);
+      if(!eliminated_rows[table_num].test(j)) {
+        if(join(r, sub->project(headers[table_num][col])).is_top()) {
+          eliminated_rows[table_num].set(j);
+          has_changed.tell_top();
+        }
+        else {
+          u.dtell(r);
+        }
       }
     }
     sub->tell(headers[table_num][col], u, has_changed);
