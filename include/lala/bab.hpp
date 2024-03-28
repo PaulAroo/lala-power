@@ -108,7 +108,7 @@ public:
    , x(other.x)
    , optimization_mode(other.optimization_mode)
   {
-    AbstractDeps<Allocators...> deps_best(deps.template get_allocator<Allocators>()...);
+    AbstractDeps<Allocators...> deps_best(false, deps.template get_allocator<Allocators>()...);
     best = deps_best.template clone<best_type>(other.best);
   }
 
