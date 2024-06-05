@@ -74,6 +74,10 @@ private:
   battery::vector<size_t, allocator_type> column_to_table_idx;
   size_t total_cells;
 
+  // We keep a bitset representation of each variable in the table.
+  // We perform a reduced product between this representation and the underlying domain.
+  battery::vector<bitset_type, allocator_type> bitset_store;
+
 public:
   template <class Alloc>
   struct tell_type {
@@ -168,6 +172,7 @@ public:
    , table_idx_to_column({0}, alloc)
    , column_to_table_idx(alloc)
    , total_cells(0)
+   , bitset_store(alloc)
   {}
 
   CUDA Tables(AType uid, sub_ptr sub, const allocator_type& alloc = allocator_type())
@@ -186,6 +191,7 @@ public:
    , table_idx_to_column(other.table_idx_to_column, deps.template get_allocator<allocator_type>())
    , column_to_table_idx(other.column_to_table_idx, deps.template get_allocator<allocator_type>())
    , total_cells(other.total_cells)
+   , bitset_store(other.bitset_store, deps.template get_allocator<allocator_type>())
   {}
 
   CUDA AType aty() const {
@@ -256,6 +262,7 @@ public:
     sub_snap_type sub_snap;
     size_t num_tables;
     size_t total_cells;
+    battery::vector<bitset_type, Alloc2> bitset_store;
 
     snapshot_type(const snapshot_type<Alloc2>&) = default;
     snapshot_type(snapshot_type<Alloc2>&&) = default;
@@ -267,18 +274,20 @@ public:
       : sub_snap(other.sub_snap, alloc)
       , num_tables(other.num_tables)
       , total_cells(other.total_cells)
+      , bitset_store(other.bitset_store, alloc)
     {}
 
-    CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables, size_t total_cells)
+    CUDA snapshot_type(sub_snap_type&& sub_snap, size_t num_tables, size_t total_cells, const battery::vector<bitset_type, allocator_type>& bitset_store, const Alloc2& alloc = Alloc2())
       : sub_snap(std::move(sub_snap))
       , num_tables(num_tables)
       , total_cells(total_cells)
+      , bitset_store(bitset_store, alloc)
     {}
   };
 
   template <class Alloc2 = allocator_type>
   CUDA snapshot_type<Alloc2> snapshot(const Alloc2& alloc = Alloc2()) const {
-    return snapshot_type<Alloc2>(sub->snapshot(alloc), headers.size(), total_cells);
+    return snapshot_type<Alloc2>(sub->snapshot(alloc), headers.size(), total_cells, bitset_store, alloc);
   }
 
   template <class Alloc2>
@@ -293,6 +302,11 @@ public:
     eliminated_rows.resize(snap.num_tables);
     for(int i = 0; i < eliminated_rows.size(); ++i) {
       eliminated_rows[i].reset();
+    }
+    bitset_store.resize(snap.bitset_store.size());
+    for(int i = 0; i < bitset_store.size(); ++i) {
+      bitset_store[i].resize(snap.bitset_store[i].size());
+      bitset_store[i] = snap.bitset_store[i];
     }
   }
 
