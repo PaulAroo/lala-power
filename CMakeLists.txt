@@ -1,18 +1,24 @@
 cmake_minimum_required(VERSION 3.24)
 cmake_policy(SET CMP0135 NEW)
 
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "Targeted CUDA architectures")
-endif()
-
 if(MSVC)
   set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Available configuration types to select")
 endif()
 
-project(lala-power
-  HOMEPAGE_URL "https://github.com/lattice-land/lala-power"
-  LANGUAGES CUDA CXX)
 option(GPU "GPU" ON)
+if(GPU)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING "Targeted CUDA architectures")
+  endif()
+  project(lala-power
+    HOMEPAGE_URL "https://github.com/lattice-land/lala-power"
+    LANGUAGES CUDA CXX)
+else()
+  project(lala-power
+    HOMEPAGE_URL "https://github.com/lattice-land/lala-power"
+    LANGUAGES CXX)
+endif()
+
 option(LOCAL_DEPS "LOCAL_DEPS" OFF)
 option(LALA_POWER_BUILD_TESTS "LALA_POWER_BUILD_TESTS" OFF)
 

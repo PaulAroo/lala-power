@@ -328,10 +328,10 @@ public:
     }
     else {
       auto x_opt = var_in(f, env);
-      if(!x_opt.has_value() || !x_opt.value().avar_of(store_aty).has_value()) {
+      if(!x_opt.has_value() || !x_opt->get().avar_of(store_aty).has_value()) {
         RETURN_INTERPRETATION_ERROR("Undeclared variable.");
       }
-      AVar x = x_opt.value().avar_of(store_aty).value();
+      AVar x = x_opt->get().avar_of(store_aty).value();
       int idx = 0;
       for(; idx < header.size() && header[idx] != x; ++idx) {}
       // If it's a new variable not present in the previous rows, we add it in each row with bottom value.
