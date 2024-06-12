@@ -68,6 +68,10 @@ private:
   table_type ask_table;
   battery::vector<bitset_type, allocator_type> eliminated_rows;
 
+  // We keep a bitset representation of each variable in the table.
+  // We perform a reduced product between this representation and the underlying domain.
+  battery::vector<bitset_type, allocator_type> bitset_store;
+
 public:
   template <class Alloc>
   struct tell_type {

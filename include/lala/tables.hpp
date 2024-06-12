@@ -57,6 +57,7 @@ public:
   using table_type = battery::vector<
     battery::vector<universe_type, allocator_type>,
     allocator_type>;
+  using table_headers = battery::vector<battery::vector<AVar, allocator_type>, allocator_type>;
   using table_collection_type = battery::vector<table_type, allocator_type>;
   using bitset_type = battery::dynamic_bitset<memory_type, allocator_type>;
 
@@ -65,7 +66,7 @@ private:
   AType store_aty;
   sub_ptr sub;
 
-  battery::vector<battery::vector<AVar, allocator_type>, allocator_type> headers;
+  battery::vector<table_headers, allocator_type> headers;
   table_collection_type tell_tables;
   table_collection_type ask_tables;
   battery::vector<bitset_type, allocator_type> eliminated_rows;
@@ -74,7 +75,7 @@ private:
   battery::vector<size_t, allocator_type> column_to_table_idx;
   size_t total_cells;
 
-  // We keep a bitset representation of each variable in the table.
+  // We keep a bitset representation of each variable in the tables.
   // We perform a reduced product between this representation and the underlying domain.
   battery::vector<bitset_type, allocator_type> bitset_store;
 
@@ -435,6 +436,72 @@ public:
             }
             diagnostics.cut(error_ctx);
             return true;
+          }
+        }
+      }
+      intermediate.headers.push_back(std::move(header));
+      if constexpr(kind == IKind::TELL) {
+        intermediate.tell_tables.push_back(std::move(tell_table));
+      }
+      intermediate.ask_tables.push_back(std::move(ask_table));
+      return true;
+    }
+    /** tables(N, C, 1D ... table, x1,..,xN, y1,..,yN, ...) where
+     * * N is the number of lines.
+     * * C is the number of columns.
+     * * x1,...,xN is the names of the variables for one table.
+    */
+    else if(f.is(F::ESeq) && f.esig() == "tables") {
+      const auto& tables = f.eseq();
+      int n = tables[0].z();
+      int c = tables[1].z();
+      int num_tables = (tables.size() - 2 - n * c) / c;
+      battery::vector<battery::vector<AVar, Alloc>, Alloc> headers(intermediate.get_allocator());
+      for(int i = 0; i < num_tables; ++i) {
+        headers.push_back(battery::vector<AVar, Alloc>(intermediate.get_allocator()));
+        for(int j = 0; j < c; ++j) {
+          const auto& fvar = tables[2+n*c+i*c+j];
+          if(!fvar.is_variable()) {
+            RETURN_INTERPRETATION_ERROR("Ill-formed predicate `tables(N, C, 1D ... table, x1,..,xN, y1,..,yN, ...)`: expected variable names after the table.");
+          }
+          auto x_opt = var_in(fvar, env);
+          if(!x_opt.has_value() || !x_opt->get().avar_of(store_aty).has_value()) {
+            RETURN_INTERPRETATION_ERROR("Undeclared variable.");
+          }
+          AVar x = x_opt->get().avar_of(store_aty).value();
+          headers.back().push_back(x);
+        }
+      }
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> tell_table(intermediate.get_allocator());
+      battery::vector<battery::vector<local_universe, Alloc>, Alloc> ask_table(intermediate.get_allocator());
+      for(int i = 0; i < n; ++i) {
+        tell_table.push_back(battery::vector<local_universe, Alloc>(intermediate.get_allocator()));
+        ask_table.push_back(battery::vector<local_universe, Alloc>(intermediate.get_allocator()));
+        for(int j = 0; j < c; ++j) {
+          tell_table[i].push_back(universe_type::bot());
+          ask_table[i].push_back(universe_type::bot());
+        }
+      }
+      for(int i = 0; i < n; ++i) {
+        for(int j = 0; j < c; ++j) {
+          if(!(tables[2+i*c+j].is(F::LV) && tables[2+i*c+j].lv() == "*")) {
+            auto fcell = F::make_binary(F::make_lvar("_"), EQ, tables[2+i*c+j]);
+            local_universe ask_u{local_universe::bot()};
+            if(ginterpret_in<IKind::ASK, diagnose>(fcell, env, ask_u, diagnostics)) {
+              ask_table[i][j].tell(ask_u);
+              if constexpr(kind == IKind::TELL) {
+                local_universe tell_u{local_universe::bot()};
+                if(ginterpret_in<IKind::TELL, diagnose>(fcell, env, tell_u, diagnostics)) {
+                  tell_table[i][j].tell(tell_u);
+                }
+                else {
+                  return false;
+                }
+              }
+            }
+            else {
+              return false;
+            }
           }
         }
       }
