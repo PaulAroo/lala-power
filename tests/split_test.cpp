@@ -22,7 +22,7 @@ void test_strategy(
   Itv left,
   Itv right)
 {
-  FlatZincOutput<standard_allocator> output(standard_allocator{});
+  SolverOutput<standard_allocator> output(standard_allocator{});
   lala::impl::FlatZincParser<standard_allocator> parser(output);
   auto f = parser.parse("var 1..1: x1; var 3..8: x2; var 5..5: x3; var 4..6: x4; var 0..7: x5; var 2..10: x6; var 2..2: x7;");
   EXPECT_TRUE(f);

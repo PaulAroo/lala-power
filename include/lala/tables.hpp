@@ -57,7 +57,7 @@ public:
   using table_type = battery::vector<
     battery::vector<universe_type, allocator_type>,
     allocator_type>;
-  using table_headers = battery::vector<battery::vector<AVar, allocator_type>, allocator_type>;
+  using table_headers = battery::vector<battery::vector<int, allocator_type>, allocator_type>;
   using table_collection_type = battery::vector<table_type, allocator_type>;
   using bitset_type = battery::dynamic_bitset<memory_type, allocator_type>;
 
@@ -78,6 +78,7 @@ private:
   // We keep a bitset representation of each variable in the tables.
   // We perform a reduced product between this representation and the underlying domain.
   battery::vector<bitset_type, allocator_type> bitset_store;
+  battery::vector<AVar, allocator_type> header2var;
 
 public:
   template <class Alloc>
@@ -174,6 +175,7 @@ public:
    , column_to_table_idx(alloc)
    , total_cells(0)
    , bitset_store(alloc)
+   , header2var(alloc)
   {}
 
   CUDA Tables(AType uid, sub_ptr sub, const allocator_type& alloc = allocator_type())
@@ -193,6 +195,7 @@ public:
    , column_to_table_idx(other.column_to_table_idx, deps.template get_allocator<allocator_type>())
    , total_cells(other.total_cells)
    , bitset_store(other.bitset_store, deps.template get_allocator<allocator_type>())
+   , header2var(other.header2var, deps.template get_allocator<allocator_type>())
   {}
 
   CUDA AType aty() const {
@@ -305,6 +308,7 @@ public:
       eliminated_rows[i].reset();
     }
     bitset_store.resize(snap.bitset_store.size());
+    header2var.resize(snap.bitset_store.size());
     for(int i = 0; i < bitset_store.size(); ++i) {
       bitset_store[i].resize(snap.bitset_store[i].size());
       bitset_store[i] = snap.bitset_store[i];
@@ -485,7 +489,7 @@ public:
       for(int i = 0; i < n; ++i) {
         for(int j = 0; j < c; ++j) {
           if(!(tables[2+i*c+j].is(F::LV) && tables[2+i*c+j].lv() == "*")) {
-            auto fcell = F::make_binary(F::make_lvar("_"), EQ, tables[2+i*c+j]);
+            auto fcell = F::make_binary(F::make_lvar(LVar<typename F::allocator_type>("_")), EQ, tables[2+i*c+j]);
             local_universe ask_u{local_universe::bot()};
             if(ginterpret_in<IKind::ASK, diagnose>(fcell, env, ask_u, diagnostics)) {
               ask_table[i][j].tell(ask_u);
@@ -564,7 +568,7 @@ public:
     sub->tell(t.sub, has_changed);
     for(int i = 0; i < t.headers.size(); ++i) {
       headers.push_back(battery::vector<AVar, allocator_type>(t.headers[i], get_allocator()));
-      for(int j = 0; j < headers[i].size(); ++j) {
+      for(int j = 0; j < t.headers[i].size(); ++j) {
         column_to_table_idx.push_back(i);
       }
       table_idx_to_column.push_back(table_idx_to_column.back() + t.tell_tables[i][0].size());
