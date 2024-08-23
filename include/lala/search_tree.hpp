@@ -134,16 +134,16 @@ public:
     return stack.get_allocator();
   }
 
-  CUDA local::BDec is_singleton() const {
+  CUDA local::B is_singleton() const {
     return stack.empty() && bool(a);
   }
 
-  CUDA local::BDec is_bot() const {
+  CUDA local::B is_top() const {
     // We need short-circuit using && due to `a` possibly a null pointer.
-    return is_singleton() && a->is_bot();
+    return is_singleton() && a->is_top();
   }
 
-  CUDA local::BInc is_top() const {
+  CUDA local::B is_bot() const {
     return !bool(a);
   }
 
@@ -195,7 +195,7 @@ public:
 public:
   template <bool diagnose = false, class F, class Env, class Alloc2>
   CUDA NI bool interpret_tell(const F& f, Env& env, tell_type<Alloc2>& tell, IDiagnostics& diagnostics) const {
-    assert(!is_top());
+    assert(!is_bot());
     if(f.is(F::ESeq) && f.esig() == "search") {
       return split->template interpret_tell<diagnose>(f, env, tell.split_tell, diagnostics);
     }
@@ -206,7 +206,7 @@ public:
 
   template <bool diagnose = false, class F, class Env, class Alloc2>
   CUDA NI bool interpret_ask(const F& f, Env& env, ask_type<Alloc2>& ask, IDiagnostics& diagnostics) const {
-    assert(!is_top());
+    assert(!is_bot());
     return a->template interpret_ask<diagnose>(f, env, ask, diagnostics);
   }
 
@@ -221,44 +221,44 @@ public:
   }
 
 private:
-  template <class Alloc, class Mem>
-  CUDA void tell_current(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    a->tell(t.sub_tell, has_changed);
-    split->tell(t.split_tell, has_changed);
+  template <class Alloc>
+  CUDA bool deduce_current(const tell_type<Alloc>& t) {
+    bool has_changed = a->deduce(t.sub_tell);
+    has_changed |= split->deduce(t.split_tell);
+    return has_changed;
   }
 
 public:
-  template <class Alloc, class Mem>
-  CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    if(!is_top()) {
+  template <class Alloc>
+  CUDA this_type& tell(const tell_type<Alloc>& t) {
+    if(!is_bot()) {
       if(!is_singleton()) {
         // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
         root_tell.sub_tells.push_back(t.sub_tell);
         root_tell.split_tells.push_back(t.split_tell);
       }
       // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
-      tell_current(t, has_changed);
+      deduce_current(t);
     }
     return *this;
   }
 
-  /** The refinement of `a` and `split` is not done here, and if needed, should be done before calling this method.
-   * This refinement operator performs one iteration of \f$ \mathit{pop} \circ \mathit{push} \circ \mathit{split} \f$.
+  /** The deduction of `a` and `split` is not done here, and if needed, should be done before calling this method.
+   * This deduction operator performs one iteration of \f$ \mathit{pop} \circ \mathit{push} \circ \mathit{split} \f$.
    * In short, it initializes `a` to the next node of the search tree.
    * If we observe `a` from the outside of this domain, `a` can backtrack, and therefore does not always evolve extensively and monotonically.
-   * Nevertheless, the refinement operator of the search tree abstract domain is extensive and monotonic (if split is) over the search tree. */
-  template <class Mem>
-  CUDA void refine(BInc<Mem>& has_changed) {
-    pop(push(split->split()), has_changed);
+   * Nevertheless, the deduction operator of the search tree abstract domain is extensive and monotonic (if split is) over the search tree. */
+  CUDA bool deduce() {
+    return pop(push(split->split()));
   }
 
   template <class ExtractionStrategy = NonAtomicExtraction>
   CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
-    return !is_top() && a->is_extractable(strategy);
+    return !is_bot() && a->is_extractable(strategy);
   }
 
   /** Extract an under-approximation if the last node popped \f$ a \f$ is an under-approximation.
-   * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `top`. */
+   * If `B` is a search tree, the under-approximation consists in a search tree \f$ \{a\} \f$ with a single node, in that case, `ua` must be different from `bot`. */
   template <class B>
   CUDA void extract(B& ua) const {
     if constexpr(impl::is_search_tree_like<B>::value) {
@@ -277,8 +277,8 @@ public:
    * If the search tree consists of a single node \f$ \{a\} \f$, we return the projection of `x` in that node.
    * Projection in a search tree with multiple nodes is currently not supported (assert false). */
   CUDA universe_type project(AVar x) const {
-    if(is_top()) {
-      return universe_type::top();
+    if(is_bot()) {
+      return universe_type::bot();
     }
     else {
       if(is_singleton()) {
@@ -286,7 +286,7 @@ public:
       }
       else {
         assert(false);
-        return universe_type::bot();
+        return universe_type::top();
         /** The problem with the method below is that we need to modify `a`, so project is not const anymore.
          * That might be problematic to modify `a` for a projection if it is currently being refined...
          * Perhaps need to copy `a` (inefficient), or request a projection in the snapshot directly. */
@@ -320,62 +320,61 @@ private:
   }
 
   /** If the current node was pruned, we need to backtrack, otherwise we just consider the next node along the branch. */
-  template <class Mem>
-  CUDA void pop(bool pruned, BInc<Mem>& has_changed) {
+  CUDA bool pop(bool pruned) {
     if(!pruned) {
-      commit_left(has_changed);
+      return commit_left();
     }
     else {
-      backtrack(has_changed);
-      commit_right(has_changed);
+      bool has_changed = backtrack();
+      has_changed |= commit_right(has_changed);
+      return has_changed;
     }
   }
 
   /** Given the current node, commit to the node on the left.
    * If we are on the root node, we save a snapshot of root before committing to the left node. */
-  template <class Mem>
-  CUDA void commit_left(BInc<Mem>& has_changed) {
+  CUDA bool commit_left() {
     assert(bool(a));
-    a->tell(stack.back().next(), has_changed);
+    return a->deduce(stack.back().next());
   }
 
   /** We explore the next node of the search tree available (after we backtracked, so it cannot be a left node). */
-  template <class Mem>
-  CUDA void commit_right(BInc<Mem>& has_changed) {
+  CUDA bool commit_right() {
     if(!stack.empty()) {
       assert(bool(a));
       stack.back().next();
-      replay(has_changed);
+      return replay();
     }
+    return false;
   }
 
   /** Goes from the current node to root. */
-  template <class Mem>
-  CUDA void backtrack(BInc<Mem>& has_changed) {
+  CUDA bool backtrack() {
     while(!stack.empty() && !stack.back().has_next()) {
       stack.pop_back();
     }
     if(!stack.empty()) {
       a->restore(battery::get<0>(root));
       split->restore(battery::get<1>(root));
-      tell_root(has_changed);
+      return deduce_root();
     }
     else if(a) {
       a = nullptr;
-      has_changed.tell_top();
+      return true;
     }
+    return false;
   }
 
   /** We do not always have access to the root node, so formulas that are added to the search tree are kept in `root_tell`.
    * During backtracking, root is available through `a`, and we add to root the formulas stored until now, so they become automatically available to the remaining nodes in the search tree. */
-  template <class Mem>
-  CUDA void tell_root(BInc<Mem>& has_changed) {
+  CUDA bool deduce_root() {
     if(root_tell.sub_tells.size() > 0 || root_tell.split_tells.size() > 0) {
+      bool has_changed = false;
       for(int i = 0; i < root_tell.sub_tells.size(); ++i) {
-        a->tell(root_tell.sub_tells[i], has_changed);
+        has_changed |= a->deduce(root_tell.sub_tells[i]);
       }
       for(int i = 0; i < root_tell.split_tells.size(); ++i) {
-        split->tell(root_tell.split_tells[i], has_changed);
+        has_changed |= split->deduce(root_tell.split_tells[i]);
       }
       root_tell.sub_tells.clear();
       root_tell.split_tells.clear();
@@ -383,15 +382,17 @@ private:
       root = battery::make_tuple(
         a->snapshot(get_allocator()),
         split->snapshot(get_allocator()));
+      return has_changed;
     }
   }
 
   /** Goes from `root` to the new node to be explored. */
-  template <class Mem>
-  CUDA void replay(BInc<Mem>& has_changed) {
+  CUDA bool replay() {
+    bool has_changed = false;
     for(int i = 0; i < stack.size(); ++i) {
-      a->tell(stack[i].current(), has_changed);
+      has_changed |= a->deduce(stack[i].current());
     }
+    return has_changed;
   }
 };
 

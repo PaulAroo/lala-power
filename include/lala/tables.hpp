@@ -66,10 +66,9 @@ private:
   AType store_aty;
   sub_ptr sub;
 
-  battery::vector<table_headers, allocator_type> headers;
   table_collection_type tell_tables;
   table_collection_type ask_tables;
-  battery::vector<bitset_type, allocator_type> eliminated_rows;
+
   // See `refine`.
   battery::vector<size_t, allocator_type> table_idx_to_column;
   battery::vector<size_t, allocator_type> column_to_table_idx;
@@ -79,6 +78,51 @@ private:
   // We perform a reduced product between this representation and the underlying domain.
   battery::vector<bitset_type, allocator_type> bitset_store;
   battery::vector<AVar, allocator_type> header2var;
+
+  struct Table {
+    size_t table_num; // The index to the shared table (either tell_tables or ask_tables).
+    battery::vector<int, allocator_type> header; // The variables for this table.
+    battery::vector<bitset_type, allocator_type> cbitsets; // One bitset per column.
+    bitset_type eliminated_rows; // The eliminated rows in this table.
+
+    Table(size_t table_num, battery::vector<int, allocator_type>&& header)
+     : table_num(table_num)
+     , header(std::move(header))
+     , cbitsets(header.size(), header.get_allocator())
+     , eliminated_rows(header.get_allocator()) // at start no row is eliminated.
+    {}
+
+    /** We have one refine operator per column in the table.
+     * This operator union all the values of the active rows, and join the result in the bitset store.
+    */
+    template <class Mem>
+    CUDA void crefine(size_t i, BInc<Mem>& has_changed) {
+      cbitsets[i].reset();
+      for(int j = 0; j < tell_tables[table_num].size(); ++j) {
+        if(!eliminated_rows.test(j)) {
+          tell_tables[table_num][j][i].value()
+          u.dtell(convert<IKind::TELL>());
+        }
+      }
+      bitset_store[header[i]]
+      // Reduced product.
+      sub->tell(headers[table_num][col], u, has_changed);
+    }
+
+    template <class Mem>
+    CUDA void lrefine(size_t table_num, size_t row, size_t col, BInc<Mem>& has_changed)
+    {
+      if(!eliminated_rows[table_num].test(row))
+      {
+        if(join(convert<IKind::TELL>(tell_tables[table_num][row][col]), sub->project(headers[table_num][col])).is_top()) {
+          eliminated_rows[table_num].set(row);
+          has_changed.tell_top();
+        }
+      }
+    }
+
+
+  };
 
 public:
   template <class Alloc>

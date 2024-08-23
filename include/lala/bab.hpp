@@ -120,12 +120,12 @@ public:
     return sub->get_allocator();
   }
 
-  CUDA local::BInc is_top() const {
-    return sub->is_top();
+  CUDA local::B is_bot() const {
+    return sub->is_bot();
   }
 
-  CUDA local::BDec is_bot() const {
-    return x.is_untyped() && sub->is_bot();
+  CUDA local::B is_top() const {
+    return x.is_untyped() && sub->is_top();
   }
 
 public:
@@ -173,23 +173,23 @@ public:
     }
   }
 
-  template <class Alloc, class Mem>
-  CUDA this_type& tell(const tell_type<Alloc>& t, BInc<Mem>& has_changed) {
-    sub->tell(t.sub_tell, has_changed);
+  template <class Alloc>
+  CUDA bool deduce(const tell_type<Alloc>& t) {
+    bool has_changed = sub->deduce(t.sub_tell);
     if(!t.x.is_untyped()) {
       assert(x.is_untyped()); // multi-objective optimization not yet supported.
       x = t.x;
       optimization_mode = t.optimization_mode;
-      has_changed.tell_top();
+      return true;
     }
-    return *this;
+    return has_changed;
   }
 
   template <class Alloc2>
   CUDA NI TFormula<Alloc2> deinterpret_best_bound(const typename best_type::universe_type& best_bound, const Alloc2& alloc = Alloc2{}) const {
     using F = TFormula<Alloc2>;
-    if((is_minimization() && best_bound.lb().is_bot())
-      ||(is_maximization() && best_bound.ub().is_bot()))
+    if((is_minimization() && best_bound.lb().is_top())
+      ||(is_maximization() && best_bound.ub().is_top()))
     {
       return F::make_true();
     }
@@ -206,8 +206,7 @@ public:
   }
 
   /** Update the variable to optimize `objective_var()` with a new bound. */
-  template <class Mem>
-  CUDA this_type& tell(const typename best_type::universe_type& best_bound, BInc<Mem>& has_changed) {
+  CUDA bool deduce(const typename best_type::universe_type& best_bound) {
     VarEnv<allocator_type> empty_env{};
     using F = TFormula<allocator_type>;
     F bound_formula = deinterpret_best_bound(best_bound, get_allocator());
@@ -215,8 +214,7 @@ public:
     typename sub_type::template tell_type<allocator_type> t;
     bool res = sub->interpret_tell(bound_formula, empty_env, t, diagnostics);
     assert(res);
-    sub->tell(t, has_changed);
-    return *this;
+    return sub->deduce(t);
   }
 
   /** Compare the best bound of two stores on the objective variable represented in this BAB abstract element.
@@ -230,27 +228,27 @@ public:
     const auto& bound2 = store2.project(x);
     using LB = typename Store1::universe_type::LB;
     using UB = typename Store1::universe_type::UB;
-    // When minimizing, the best bound is getting smaller and smaller, hence the order over LB is not suited, we must compare the bound in UB which represents this fact.
-    // And dually for maximization.
+    // When minimizing, the best bound is getting smaller and smaller
     if(is_minimization()) {
-      return dual<UB>(bound1.lb()) > dual<UB>(bound2.lb());
+      return bound1.lb() > bound2.lb(); // note it's the dual order, so when b1 > b2, it actually means the numerical value of b1 is smaller than the one of b2.
     }
+    // And dually for maximization.
     else {
-      return dual<LB>(bound1.ub()) > dual<LB>(bound2.ub());
+      return bound1.ub() > bound2.ub();
     }
   }
 
-  /** This refinement operator performs "branch-and-bound" by adding a constraint to the root node of the search tree to ensure the next solution is better than the current one, and store the best solution found.
+  /** This deduction operator performs "branch-and-bound" by adding a constraint to the root node of the search tree to ensure the next solution is better than the current one, and store the best solution found.
    * \pre The current subelement must be extractable, and if it is an optimization problem, have a better bound than `best` (this is not checked here).
-   * Beware this refinement operator is not idempotent (it must only be called once on each new solution).
+   * Beware this deduction operator is not idempotent (it must only be called once on each new solution).
    */
-  template <class Mem>
-  CUDA void refine(BInc<Mem>& has_changed) {
+  CUDA bool deduce() {
     sub->extract(*best);
     solutions_found++;
     if(is_optimization()) {
-      tell(best->project(x), has_changed);
+      deduce(best->project(x));
     }
+    return true;
   }
 
   CUDA int solutions_count() const {
@@ -260,7 +258,7 @@ public:
   /** Given an optimization problem, it is extractable only when we have explored the whole state space (indicated by the subdomain being equal to top), we have found one solution, and that solution is extractable. */
   template <class ExtractionStrategy = NonAtomicExtraction>
   CUDA bool is_extractable(const ExtractionStrategy& strategy = ExtractionStrategy()) const {
-    return solutions_found > 0 && sub->is_top() && best->is_extractable(strategy);
+    return solutions_found > 0 && sub->is_bot() && best->is_extractable(strategy);
   }
 
   /** Extract the best solution found in `ua`.

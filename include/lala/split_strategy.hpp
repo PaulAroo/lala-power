@@ -138,8 +138,9 @@ private:
     while(current_strategy < strategies.size()) {
       const auto& vars = current_vars();
       while(next_unassigned_var < vars.size()) {
-        const auto& v = a->project(vars[next_unassigned_var]);
-        if(v.lb() < dual<LB>(v.ub())) {
+        universe_type v{};
+        a->project(vars[next_unassigned_var], v);
+        if(dual<UB>(v.lb()) < v.ub()) {
           return;
         }
         next_unassigned_var++;
@@ -156,10 +157,8 @@ private:
     auto best = op(a->project(vars[i]));
     for(++i; i < vars.size(); ++i) {
       const auto& u = a->project(vars[i]);
-      if(u.lb() < dual<LB>(u.ub())) {
-        local::BInc has_changed;
-        best.tell(op(u), has_changed);
-        if(has_changed) {
+      if(dual<UB>(u.lb()) < u.ub()) {
+        if(best.meet(op(u))) {
           best_i = i;
         }
       }
@@ -183,7 +182,7 @@ private:
   template <class U>
   CUDA NI branch_type make_branch(AVar x, Sig left_op, Sig right_op, const U& u) {
     if((u.is_top() && U::preserve_top) || (u.is_bot() && U::preserve_bot)) {
-      if(u.is_bot()) {
+      if(u.is_top()) {
         printf("%% WARNING: Cannot currently branch on unbounded variables.\n");
       }
       return branch_type(get_allocator());
@@ -316,23 +315,20 @@ public:
     return interpret_tell<diagnose>(f, env, intermediate, diagnostics);
   }
 
+  /** This deduce method adds new strategies, and therefore do not satisfy the PCCP model.
+   * Calling this function multiple times will create multiple strategies, that will be called in sequence along a branch of the search tree.
+   * @sequential
+  */
   template <class Alloc2>
-  CUDA this_type& tell(const tell_type<Alloc2>& t) {
+  CUDA bool deduce(const tell_type<Alloc2>& t) {
+    bool has_changed = false;
     for(int i = 0; i < t.size(); ++i) {
       if(t[i].vars.size() > 0) {
         strategies.push_back(t[i]);
+        has_changed = true;
       }
     }
-    return *this;
-  }
-
-  /** Calling this function multiple times will create multiple strategies, that will be called in sequence along a branch of the search tree. */
-  template <class Alloc2, class Mem>
-  CUDA this_type& tell(const tell_type<Alloc2>& t, BInc<Mem>& has_changed) {
-    if(t.size() > 0) {
-      has_changed.tell_top();
-    }
-    return tell(t);
+    return has_changed;
   }
 
   /** Split the next unassigned variable according to the current strategy.
@@ -340,9 +336,9 @@ public:
    * If no strategy remains, returns an empty set of branches.
 
    If the next unassigned variable cannot be split, for instance because the value ordering strategy maps to `bot` or `top`, an empty set of branches is returned.
-   This also means that you cannot suppose `split(a) = {}` to mean `a` is at `top`. */
+   This also means that you cannot suppose `split(a) = {}` to mean `a` is at `bot`. */
   CUDA NI branch_type split() {
-    if(a->is_top()) {
+    if(a->is_bot()) {
       return branch_type(get_allocator());
     }
     move_to_next_unassigned_var();
