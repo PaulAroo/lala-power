@@ -10,7 +10,7 @@ void apply_branch_and_test(
   Itv expected)
 {
   auto snapshot = store->snapshot();
-  store->tell(branch);
+  store->deduce(branch);
   EXPECT_EQ((*store)[var_idx], expected);
   store->restore(snapshot);
 }
@@ -40,7 +40,7 @@ void test_strategy(
   EXPECT_TRUE(strat);
   SplitStrategy<IStore>::tell_type<standard_allocator> split_tell;
   EXPECT_TRUE(split->template interpret_tell<true>(*strat, env, split_tell, diagnostics));
-  split->tell(split_tell);
+  split->deduce(split_tell);
   auto branches = split->split();
   auto left_branch = branches.next();
   EXPECT_EQ(branches.size(), 2);
@@ -83,7 +83,7 @@ TEST(BranchTest, InputOrderTest) {
   test_strategy("largest", "indomain_reverse_split", 5, Itv(7, 10), Itv(2, 6));
 }
 
-using AItv = Interval<ZInc<int, battery::atomic_memory<>>>;
+using AItv = Interval<ZLB<int, battery::atomic_memory<>>>;
 using AIStore = VStore<AItv, standard_allocator>;
 
 TEST(BranchTest, CopySplitStrategy) {

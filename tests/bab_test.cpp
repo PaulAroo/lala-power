@@ -32,8 +32,8 @@ void test_unconstrained_bab(bool mode) {
   auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
   auto bab = BAB_(env.extends_abstract_dom(), search_tree, best);
 
-  EXPECT_TRUE(bab.is_bot());
-  EXPECT_FALSE(bab.is_top());
+  EXPECT_TRUE(bab.is_top());
+  EXPECT_FALSE(bab.is_bot());
 
   IDiagnostics diagnostics;
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
@@ -42,28 +42,26 @@ void test_unconstrained_bab(bool mode) {
   EXPECT_FALSE(bab.is_top());
 
   // Find solution optimizing a[3].
-  local::BInc has_changed{true};
+  bool has_changed{true};
   int iterations = 0;
   while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \f$.
     if(search_tree->is_extractable()) {
-      bab.refine(has_changed);
+      has_changed |= bab.deduce();
     }
-    search_tree->refine(has_changed);
+    has_changed |= search_tree->deduce();
   }
   // With a input-order smallest first strat, the fixed point is reached after 1 iteration.
   EXPECT_EQ(iterations, 1);
   // Find the optimum in the root node since they are no constraint...
   check_solution(*best, {Itv(0,2),Itv(0,2),Itv(0,2)});
 
-  EXPECT_TRUE(search_tree->is_top());
+  EXPECT_TRUE(search_tree->is_bot());
 
   // One more iteration to check idempotency.
-  has_changed = false;
-  search_tree->refine(has_changed);
-  EXPECT_FALSE(has_changed);
+  EXPECT_FALSE(search_tree->deduce());
 }
 
 TEST(BABTest, UnconstrainedOptimization) {
@@ -98,19 +96,19 @@ void test_constrained_bab(bool mode) {
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   // Find solution optimizing a[3].
-  local::BInc has_changed{true};
+  bool has_changed{true};
   int iterations = 0;
   while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
-    GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+    has_changed |= GaussSeidelIteration{}.fixpoint(*ipc);
     if(search_tree->is_extractable()) {
-      bab.refine(has_changed);
+      has_changed |= bab.deduce();
     }
-    search_tree->refine(has_changed);
+    has_changed |= search_tree->deduce();
   }
-  EXPECT_TRUE(bab.is_top());
+  EXPECT_TRUE(bab.is_bot());
   if(mode) {
     check_solution(*best, {Itv(0,0),Itv(0,0),Itv(0,0)});
     EXPECT_EQ(iterations, 5);
@@ -120,12 +118,11 @@ void test_constrained_bab(bool mode) {
     EXPECT_EQ(iterations, 7);
   }
 
-  EXPECT_TRUE(search_tree->is_top());
+  EXPECT_TRUE(search_tree->is_bot());
 
   // One more iteration to check idempotency.
-  has_changed = false;
-  GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
-  search_tree->refine(has_changed);
+  has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
+  has_changed |= search_tree->deduce();
   EXPECT_FALSE(has_changed);
 }
 

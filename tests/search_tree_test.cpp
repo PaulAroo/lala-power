@@ -32,8 +32,8 @@ TEST(SearchTreeTest, EnumerationSolution) {
   auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
   auto search_tree = ST(env.extends_abstract_dom(), store, split);
 
-  EXPECT_TRUE(search_tree.is_bot());
-  EXPECT_FALSE(search_tree.is_top());
+  EXPECT_TRUE(search_tree.is_top());
+  EXPECT_FALSE(search_tree.is_bot());
 
   using F = TFormula<standard_allocator>;
   IDiagnostics diagnostics;
@@ -45,16 +45,14 @@ TEST(SearchTreeTest, EnumerationSolution) {
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
   ST sol(search_tree, deps);
 
-  local::BInc has_changed;
+  bool has_changed;
   int solutions = 0;
   for(int x1 = 0; x1 < 3; ++x1) {
     for(int x2 = 0; x2 < 3; ++x2) {
       for(int x3 = 0; x3 < 3; ++x3) {
         // Going down a branch of the search tree until all variables are assigned.
         do {
-          has_changed.dtell_bot();
-          search_tree.refine(has_changed);
-          EXPECT_TRUE(has_changed);
+          EXPECT_TRUE(search_tree.deduce());
         } while(!all_assigned(*store));
         // There is no constraint so we are always navigating the under-approximated space.
         EXPECT_TRUE(search_tree.is_extractable());
@@ -67,16 +65,12 @@ TEST(SearchTreeTest, EnumerationSolution) {
   }
   EXPECT_FALSE(search_tree.is_top());
   EXPECT_FALSE(search_tree.is_bot());
-  has_changed.dtell_bot();
-  search_tree.refine(has_changed);
-  EXPECT_TRUE(has_changed);
-  EXPECT_TRUE(search_tree.is_top());
-  EXPECT_FALSE(search_tree.is_bot());
-  has_changed.dtell_bot();
-  search_tree.refine(has_changed);
-  EXPECT_FALSE(has_changed);
-  EXPECT_TRUE(search_tree.is_top());
-  EXPECT_FALSE(search_tree.is_bot());
+  EXPECT_TRUE(search_tree.deduce());
+  EXPECT_TRUE(search_tree.is_bot());
+  EXPECT_FALSE(search_tree.is_top());
+  EXPECT_FALSE(search_tree.deduce());
+  EXPECT_TRUE(search_tree.is_bot());
+  EXPECT_FALSE(search_tree.is_top());
   EXPECT_EQ(solutions, 3*3*3);
 }
 
@@ -95,8 +89,8 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
   auto search_tree = IST(env.extends_abstract_dom(), ipc, split);
 
-  EXPECT_TRUE(search_tree.is_bot());
-  EXPECT_FALSE(search_tree.is_top());
+  EXPECT_TRUE(search_tree.is_top());
+  EXPECT_FALSE(search_tree.is_bot());
 
   using F = TFormula<standard_allocator>;
   IDiagnostics diagnostics;
@@ -105,7 +99,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
   IST sol(search_tree, deps);
 
-  local::BInc has_changed;
+  bool has_changed;
   int solutions = 0;
   vector<vector<int>> sols = {
     {0, 0, 0},
@@ -118,23 +112,21 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   int iterations = 0;
   while(has_changed) {
     ++iterations;
-    has_changed = false;
-    GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
+    has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
     if(all_assigned(*store) && search_tree.is_extractable()) {
       search_tree.extract(sol);
       check_solution(sol, sols[solutions++]);
     }
-    search_tree.refine(has_changed);
+    has_changed |= search_tree.deduce();
     // std::cout << *store << std::endl;
   }
   EXPECT_EQ(iterations, 12);
-  EXPECT_TRUE(search_tree.is_top());
-  EXPECT_FALSE(search_tree.is_bot());
-  has_changed = local::BInc::bot();
-  GaussSeidelIteration{}.fixpoint(*ipc, has_changed);
-  search_tree.refine(has_changed);
+  EXPECT_TRUE(search_tree.is_bot());
+  EXPECT_FALSE(search_tree.is_top());
+  has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
+  has_changed |= search_tree.deduce();
   EXPECT_FALSE(has_changed);
-  EXPECT_TRUE(search_tree.is_top());
-  EXPECT_FALSE(search_tree.is_bot());
+  EXPECT_TRUE(search_tree.is_bot());
+  EXPECT_FALSE(search_tree.is_top());
   EXPECT_EQ(solutions, sols.size());
 }

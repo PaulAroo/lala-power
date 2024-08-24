@@ -6,7 +6,7 @@
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"
 #include "lala/logic/logic.hpp"
-#include "lala/universes/primitive_upset.hpp"
+#include "lala/universes/arith_bound.hpp"
 #include "lala/abstract_deps.hpp"
 #include "lala/vstore.hpp"
 
@@ -230,7 +230,7 @@ private:
 
 public:
   template <class Alloc>
-  CUDA this_type& tell(const tell_type<Alloc>& t) {
+  CUDA bool deduce(const tell_type<Alloc>& t) {
     if(!is_bot()) {
       if(!is_singleton()) {
         // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
@@ -238,9 +238,9 @@ public:
         root_tell.split_tells.push_back(t.split_tell);
       }
       // Nevertheless, the rest of the subtree to be explored is still updated with `t`.
-      deduce_current(t);
+      return deduce_current(t);
     }
-    return *this;
+    return false;
   }
 
   /** The deduction of `a` and `split` is not done here, and if needed, should be done before calling this method.
@@ -326,7 +326,7 @@ private:
     }
     else {
       bool has_changed = backtrack();
-      has_changed |= commit_right(has_changed);
+      has_changed |= commit_right();
       return has_changed;
     }
   }
@@ -368,8 +368,8 @@ private:
   /** We do not always have access to the root node, so formulas that are added to the search tree are kept in `root_tell`.
    * During backtracking, root is available through `a`, and we add to root the formulas stored until now, so they become automatically available to the remaining nodes in the search tree. */
   CUDA bool deduce_root() {
+    bool has_changed = false;
     if(root_tell.sub_tells.size() > 0 || root_tell.split_tells.size() > 0) {
-      bool has_changed = false;
       for(int i = 0; i < root_tell.sub_tells.size(); ++i) {
         has_changed |= a->deduce(root_tell.sub_tells[i]);
       }
@@ -382,8 +382,8 @@ private:
       root = battery::make_tuple(
         a->snapshot(get_allocator()),
         split->snapshot(get_allocator()));
-      return has_changed;
     }
+    return has_changed;
   }
 
   /** Goes from `root` to the new node to be explored. */

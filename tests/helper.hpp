@@ -30,9 +30,9 @@ static LVar<standard_allocator> var_x2 = "x2";
 static LVar<standard_allocator> var_z = "z";
 static LVar<standard_allocator> var_b = "b";
 
-using zi = local::ZInc;
-using zd = local::ZDec;
-using Itv = Interval<zi>;
+using zlb = local::ZLB;
+using zub = local::ZUB;
+using Itv = Interval<zlb>;
 using IStore = VStore<Itv, standard_allocator>;
 using IPC = PC<IStore>; // Interval Propagators Completion
 
@@ -41,12 +41,5 @@ const AType pty = 1;
 const AType tty = 2;
 const AType split_ty = 3;
 const AType bab_ty = 4;
-
-template <class A>
-void seq_refine_check(A& a, local::BInc expect_changed = true) {
-  local::BInc has_changed;
-  GaussSeidelIteration{}.iterate(a, has_changed);
-  EXPECT_EQ(has_changed, expect_changed);
-}
 
 #endif

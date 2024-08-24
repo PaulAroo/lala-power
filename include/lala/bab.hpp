@@ -6,7 +6,7 @@
 #include "battery/vector.hpp"
 #include "battery/shared_ptr.hpp"
 #include "lala/logic/logic.hpp"
-#include "lala/universes/primitive_upset.hpp"
+#include "lala/universes/arith_bound.hpp"
 #include "lala/abstract_deps.hpp"
 #include "lala/vstore.hpp"
 
