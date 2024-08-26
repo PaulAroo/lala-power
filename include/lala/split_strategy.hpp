@@ -320,8 +320,8 @@ public:
    * @sequential
   */
   template <class Alloc2>
-  CUDA bool deduce(const tell_type<Alloc2>& t) {
-    bool has_changed = false;
+  CUDA local::B deduce(const tell_type<Alloc2>& t) {
+    local::B has_changed = false;
     for(int i = 0; i < t.size(); ++i) {
       if(t[i].vars.size() > 0) {
         strategies.push_back(t[i]);

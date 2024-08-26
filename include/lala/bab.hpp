@@ -206,7 +206,7 @@ public:
   }
 
   /** Update the variable to optimize `objective_var()` with a new bound. */
-  CUDA bool deduce(const typename best_type::universe_type& best_bound) {
+  CUDA local::B deduce(const typename best_type::universe_type& best_bound) {
     VarEnv<allocator_type> empty_env{};
     using F = TFormula<allocator_type>;
     F bound_formula = deinterpret_best_bound(best_bound, get_allocator());
@@ -224,17 +224,17 @@ public:
   template <class Store1, class Store2>
   CUDA bool compare_bound(const Store1& store1, const Store2& store2) const {
     assert(is_optimization());
-    const auto& bound1 = store1.project(x);
-    const auto& bound2 = store2.project(x);
-    using LB = typename Store1::universe_type::LB;
-    using UB = typename Store1::universe_type::UB;
-    // When minimizing, the best bound is getting smaller and smaller
+    using Univ1 = typename Store1::local_universe;
+    using Univ2 = typename Store2::local_universe;
+    Univ1 bound1 = store1.project(x);
+    Univ2 bound2 = store2.project(x);
+    // When minimizing, the best bound is getting smaller and smaller.
     if(is_minimization()) {
-      return bound1.lb() > bound2.lb(); // note it's the dual order, so when b1 > b2, it actually means the numerical value of b1 is smaller than the one of b2.
+      return (!bound1.is_top() && bound2.is_top()) || bound1.lb() > bound2.lb();
     }
     // And dually for maximization.
     else {
-      return bound1.ub() > bound2.ub();
+      return (!bound1.is_top() && bound2.is_top()) || bound1.ub() > bound2.ub();
     }
   }
 
@@ -242,7 +242,7 @@ public:
    * \pre The current subelement must be extractable, and if it is an optimization problem, have a better bound than `best` (this is not checked here).
    * Beware this deduction operator is not idempotent (it must only be called once on each new solution).
    */
-  CUDA bool deduce() {
+  CUDA local::B deduce() {
     sub->extract(*best);
     solutions_found++;
     if(is_optimization()) {

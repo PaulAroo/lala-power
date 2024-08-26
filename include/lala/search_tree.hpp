@@ -33,6 +33,7 @@ public:
   using split_type = Split;
   using branch_type = typename split_type::branch_type;
   using universe_type = typename A::universe_type;
+  using local_universe = typename universe_type::local_type;
   using sub_type = A;
   using sub_ptr = abstract_ptr<sub_type>;
   using split_ptr = abstract_ptr<split_type>;
@@ -222,15 +223,15 @@ public:
 
 private:
   template <class Alloc>
-  CUDA bool deduce_current(const tell_type<Alloc>& t) {
-    bool has_changed = a->deduce(t.sub_tell);
+  CUDA local::B deduce_current(const tell_type<Alloc>& t) {
+    local::B has_changed = a->deduce(t.sub_tell);
     has_changed |= split->deduce(t.split_tell);
     return has_changed;
   }
 
 public:
   template <class Alloc>
-  CUDA bool deduce(const tell_type<Alloc>& t) {
+  CUDA local::B deduce(const tell_type<Alloc>& t) {
     if(!is_bot()) {
       if(!is_singleton()) {
         // We will add `t` to root when we backtrack (see `pop`) and have a chance to modify the root node.
@@ -276,9 +277,9 @@ public:
   /** If the search tree is empty (\f$ \top \f$), we return \f$ \top_U \f$.
    * If the search tree consists of a single node \f$ \{a\} \f$, we return the projection of `x` in that node.
    * Projection in a search tree with multiple nodes is currently not supported (assert false). */
-  CUDA universe_type project(AVar x) const {
+  CUDA local_universe project(AVar x) const {
     if(is_bot()) {
-      return universe_type::bot();
+      return local_universe::bot();
     }
     else {
       if(is_singleton()) {
@@ -286,15 +287,30 @@ public:
       }
       else {
         assert(false);
-        return universe_type::top();
+        return local_universe::top();
         /** The problem with the method below is that we need to modify `a`, so project is not const anymore.
          * That might be problematic to modify `a` for a projection if it is currently being refined...
          * Perhaps need to copy `a` (inefficient), or request a projection in the snapshot directly. */
         // a->restore(root);
-        // universe_type u = a->project(x);
+        // local_universe u = a->project(x);
         // BInc has_changed = BInc::bot();
         // replay(has_changed);
         // return u;
+      }
+    }
+  }
+
+  template <class Univ>
+  CUDA void project(AVar x, Univ& r) const {
+    if(is_bot()) {
+      return r.meet_bot();
+    }
+    else {
+      if(is_singleton()) {
+        a->project(x, r);
+      }
+      else {
+        assert(false);
       }
     }
   }
