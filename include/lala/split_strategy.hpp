@@ -140,7 +140,7 @@ private:
       while(next_unassigned_var < vars.size()) {
         universe_type v{};
         a->project(vars[next_unassigned_var], v);
-        if(v.lb().value() < v.ub().value()) {
+        if(v.lb().value() != v.ub().value()) {
           return;
         }
         next_unassigned_var++;
@@ -157,7 +157,7 @@ private:
     auto best = op(a->project(vars[i]));
     for(++i; i < vars.size(); ++i) {
       const auto& u = a->project(vars[i]);
-      if(u.lb().value() < u.ub().value()) {
+      if(u.lb().value() != u.ub().value()) {
         if(best.meet(op(u))) {
           best_i = i;
         }

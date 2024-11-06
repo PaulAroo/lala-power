@@ -230,7 +230,7 @@ public:
     Univ2 bound2 = store2.project(x);
     // When minimizing, the best bound is getting smaller and smaller.
     if(is_minimization()) {
-      return (!bound1.is_top() && bound2.is_top()) || bound1.lb() > bound2.lb();
+      return (!bound1.is_top() && bound2.is_top()) || bound1.lb() > bound2.lb(); // note that `>` reflects the order of LB.
     }
     // And dually for maximization.
     else {
