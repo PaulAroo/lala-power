@@ -140,7 +140,7 @@ private:
       while(next_unassigned_var < vars.size()) {
         universe_type v{};
         a->project(vars[next_unassigned_var], v);
-        if(dual<UB>(v.lb()) < v.ub()) {
+        if(v.lb().value() < v.ub().value()) {
           return;
         }
         next_unassigned_var++;
@@ -157,7 +157,7 @@ private:
     auto best = op(a->project(vars[i]));
     for(++i; i < vars.size(); ++i) {
       const auto& u = a->project(vars[i]);
-      if(dual<UB>(u.lb()) < u.ub()) {
+      if(u.lb().value() < u.ub().value()) {
         if(best.meet(op(u))) {
           best_i = i;
         }
@@ -172,9 +172,9 @@ private:
     switch(strat.var_order) {
       case VariableOrder::INPUT_ORDER: return vars[next_unassigned_var];
       case VariableOrder::FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return u.width().ub(); });
-      case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual<LB>(u.width().ub()); });
-      case VariableOrder::LARGEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual<LB>(u.ub()); });
-      case VariableOrder::SMALLEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual<UB>(u.lb()); });
+      case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.width().ub()); });
+      case VariableOrder::LARGEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.ub()); });
+      case VariableOrder::SMALLEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<UB>(u.lb()); });
       default: printf("BUG: unsupported variable order strategy\n"); assert(false); return AVar{};
     }
   }
