@@ -96,13 +96,17 @@ void test_constrained_bab(bool mode) {
   EXPECT_TRUE(interpret_and_tell<true>(*f, env, bab, diagnostics));
 
   // Find solution optimizing a[3].
-  bool has_changed{true};
+  local::B has_changed{true};
   int iterations = 0;
   while(!bab.is_extractable() && has_changed) {
     iterations++;
     has_changed = false;
     // Compute \f$ pop \circ push \circ split \circ bab \circ refine \f$.
-    has_changed |= GaussSeidelIteration{}.fixpoint(*ipc);
+    GaussSeidelIteration{}.fixpoint(
+      ipc->num_deductions(),
+      [&](size_t i) { return ipc->deduce(i); },
+      has_changed
+    );
     if(search_tree->is_extractable()) {
       has_changed |= bab.deduce();
     }
@@ -121,7 +125,12 @@ void test_constrained_bab(bool mode) {
   EXPECT_TRUE(search_tree->is_bot());
 
   // One more iteration to check idempotency.
-  has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
+  has_changed = false;
+  GaussSeidelIteration{}.fixpoint(
+    ipc->num_deductions(),
+    [&](size_t i) { return ipc->deduce(i); },
+    has_changed
+  );
   has_changed |= search_tree->deduce();
   EXPECT_FALSE(has_changed);
 }

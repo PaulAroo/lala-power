@@ -99,7 +99,6 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   AbstractDeps<standard_allocator> deps{standard_allocator{}};
   IST sol(search_tree, deps);
 
-  bool has_changed;
   int solutions = 0;
   vector<vector<int>> sols = {
     {0, 0, 0},
@@ -108,11 +107,16 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
     {1, 0, 1},
     {1, 1, 2},
     {2, 0, 2}} ;
-  has_changed = true;
   int iterations = 0;
+  local::B has_changed(true);
   while(has_changed) {
     ++iterations;
-    has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
+    has_changed = false;
+    GaussSeidelIteration{}.fixpoint(
+      ipc->num_deductions(),
+      [&](size_t i) { return ipc->deduce(i); },
+      has_changed
+    );
     if(all_assigned(*store) && search_tree.is_extractable()) {
       search_tree.extract(sol);
       check_solution(sol, sols[solutions++]);
@@ -123,7 +127,12 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   EXPECT_EQ(iterations, 12);
   EXPECT_TRUE(search_tree.is_bot());
   EXPECT_FALSE(search_tree.is_top());
-  has_changed = GaussSeidelIteration{}.fixpoint(*ipc);
+  has_changed = false;
+  GaussSeidelIteration{}.fixpoint(
+    ipc->num_deductions(),
+    [&](size_t i) { return ipc->deduce(i); },
+    has_changed
+  );
   has_changed |= search_tree.deduce();
   EXPECT_FALSE(has_changed);
   EXPECT_TRUE(search_tree.is_bot());

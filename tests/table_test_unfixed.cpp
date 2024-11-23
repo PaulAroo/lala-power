@@ -49,7 +49,12 @@ void refine_and_test(L& table, int num_refine, const std::vector<Itv>& before, c
   for(int i = 0; i < before.size(); ++i) {
     EXPECT_EQ(table[i], before[i]) << "table[" << i << "]";
   }
-  local::BInc has_changed = GaussSeidelIteration{}.fixpoint(table);
+  local::B has_changed = false;
+  GaussSeidelIteration{}.fixpoint(
+    table.num_refinements(),
+    [&](size_t i) { return table.refine(i); },
+    has_changed
+  );
   EXPECT_EQ(has_changed, expect_changed);
   for(int i = 0; i < after.size(); ++i) {
     EXPECT_EQ(table[i], after[i]) << "table[" << i << "]";

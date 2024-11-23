@@ -344,6 +344,7 @@ public:
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();
+      // printf("split on %d\n", x.vid());
       switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
@@ -354,6 +355,7 @@ public:
       }
     }
     else {
+      // printf("%% All variables are already assigned, we could not split anymore. It means the underlying abstract domain has not detected the satisfiability or unsatisfiability of the problem although all variables were assigned.\n");
       return branch_type(get_allocator());
     }
   }
