@@ -21,6 +21,7 @@ endif()
 
 option(LOCAL_DEPS "LOCAL_DEPS" OFF)
 option(LALA_POWER_BUILD_TESTS "LALA_POWER_BUILD_TESTS" OFF)
+option(LALA_POWER_BUILD_DOC "LALA_POWER_BUILD_DOC" OFF)
 
 # Dependencies
 
@@ -32,7 +33,7 @@ else()
   FetchContent_Declare(
     lala_core
     GIT_REPOSITORY "https://github.com/lattice-land/lala-core.git"
-    GIT_TAG        v1.2.3
+    GIT_TAG        v1.2.4
   )
 endif()
 
@@ -51,7 +52,7 @@ if(LALA_POWER_BUILD_TESTS)
 FetchContent_Declare(
   googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.14.0
+  GIT_TAG v1.15.2
   GIT_SHALLOW 1
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
@@ -68,13 +69,13 @@ else()
   FetchContent_Declare(
     lala_pc
     GIT_REPOSITORY "https://github.com/lattice-land/lala-pc.git"
-    GIT_TAG        v1.2.3
+    GIT_TAG        v1.2.4
   )
 
   FetchContent_Declare(
     lala_parsing
     GIT_REPOSITORY "https://github.com/lattice-land/lala-parsing.git"
-    GIT_TAG        v1.2.3
+    GIT_TAG        v1.2.4
   )
 endif()
 
@@ -93,6 +94,8 @@ endforeach()
 endif()
 
 # Documentation
+
+if(LALA_POWER_BUILD_DOC)
 
 find_package(Doxygen REQUIRED doxygen)
 
@@ -124,3 +127,4 @@ doxygen_add_docs(doc_lala_power
                  "include/"
                  ALL
                  COMMENT "Generate HTML documentation")
+endif()
