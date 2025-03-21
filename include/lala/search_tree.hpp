@@ -82,12 +82,12 @@ public:
   template <class A2, class S2, class Alloc2>
   friend class SearchTree;
 
+  split_ptr split;
 private:
   AType atype;
   // `a` reflects the current node of the search tree being refined and expanded.
   // If the search tree is `top` (i.e., empty), then `a` is equal to `nullptr`.
   sub_ptr a;
-  split_ptr split;
   battery::vector<branch_type, allocator_type> stack;
   using sub_snapshot_type = sub_type::template snapshot_type<allocator_type>;
   using split_snapshot_type = split_type::template snapshot_type<allocator_type>;
@@ -320,7 +320,7 @@ public:
     return stack.size();
   }
 
-private:
+// private:
   /** \return `true` if the current node is pruned, and `false` if a new branch was pushed. */
   CUDA bool push(branch_type&& branch) {
     if(branch.size() > 0) {
