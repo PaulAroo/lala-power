@@ -37,6 +37,39 @@ enum class ValueOrder {
   // MIDDLE,
 };
 
+/** A split strategy consists of a variable order and value order on a subset of the variables. */
+template <class Allocator>
+struct StrategyType {
+  using allocator_type = Allocator;
+
+  VariableOrder var_order;
+  ValueOrder val_order;
+  battery::vector<AVar, Allocator> vars;
+
+  CUDA StrategyType(const Allocator& alloc = Allocator{})
+   : var_order(VariableOrder::INPUT_ORDER), val_order(ValueOrder::MIN), vars(alloc)
+  {}
+
+  StrategyType(const StrategyType<Allocator>&) = default;
+  StrategyType(StrategyType<Allocator>&&) = default;
+  StrategyType& operator=(StrategyType<Allocator>&&) = default;
+
+  CUDA StrategyType(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Allocator>&& vars)
+   : var_order(var_order), val_order(val_order), vars(std::move(vars))
+  {}
+
+  CUDA allocator_type get_allocator() const {
+    return vars.get_allocator();
+  }
+
+  template <class StrategyType2>
+  CUDA StrategyType(const StrategyType2& other, const Allocator& alloc = Allocator{})
+  : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
+
+  template <class Alloc2>
+  friend class StrategyType;
+};
+
 template <class A, class Allocator = typename A::allocator_type>
 class SplitStrategy {
 public:
@@ -85,36 +118,8 @@ public:
     {}
   };
 
-  /** A split strategy consists of a variable order and value order on a subset of the variables. */
   template <class Alloc2>
-  struct strategy_type {
-    VariableOrder var_order;
-    ValueOrder val_order;
-    battery::vector<AVar, Alloc2> vars;
-
-    CUDA strategy_type(const Alloc2& alloc = Alloc2{}): var_order(VariableOrder::INPUT_ORDER), val_order(ValueOrder::MIN), vars(alloc) {}
-    strategy_type(const strategy_type<Alloc2>&) = default;
-    strategy_type(strategy_type<Alloc2>&&) = default;
-    strategy_type& operator=(strategy_type<Alloc2>&&) = default;
-
-    CUDA strategy_type(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Alloc2>&& vars)
-      : var_order(var_order), val_order(val_order), vars(std::move(vars)) {}
-
-    using allocator_type = Alloc2;
-    CUDA allocator_type get_allocator() const {
-      return vars.get_allocator();
-    }
-
-    template <class StrategyType>
-    CUDA strategy_type(const StrategyType& other, const Alloc2& alloc = Alloc2{})
-    : var_order(other.var_order), val_order(other.val_order), vars(other.vars, alloc) {}
-
-    template <class Alloc3>
-    friend class strategy_type;
-  };
-
-  template <class Alloc2>
-  using tell_type = battery::vector<strategy_type<Alloc2>, Alloc2>;
+  using tell_type = battery::vector<StrategyType<Alloc2>, Alloc2>;
 
   template <class A2, class Alloc2>
   friend class SplitStrategy;
@@ -126,7 +131,7 @@ private:
 
   AType atype;
   abstract_ptr<A> a;
-  battery::vector<strategy_type<allocator_type>, allocator_type> strategies;
+  battery::vector<StrategyType<allocator_type>, allocator_type> strategies;
   int current_strategy;
   int next_unassigned_var;
 
@@ -267,7 +272,7 @@ public:
     {
       RETURN_INTERPRETATION_ERROR("SplitStrategy can only interpret predicates of the form `search(input_order, indomain_min, x1, ..., xN)`.");
     }
-    strategy_type<Alloc2> strat{tell.get_allocator()};
+    StrategyType<Alloc2> strat{tell.get_allocator()};
     const auto& var_order_str = f.eseq()[0].esig();
     const auto& val_order_str = f.eseq()[1].esig();
     if(var_order_str == "input_order") { strat.var_order = VariableOrder::INPUT_ORDER; }
@@ -362,6 +367,10 @@ public:
 
   CUDA size_t num_strategies() const {
     return strategies.size();
+  }
+
+  CUDA const auto& strategies_() const {
+    return strategies;
   }
 };
 
