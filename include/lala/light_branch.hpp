@@ -14,6 +14,8 @@ struct LightBranch {
 
   AVar var;
   U children[2];
+  /** Ropes are used for fast backtracking: `ropes[1]` is the depth we need to backtrack to if the right node is a leaf. */
+  int ropes[2];
   int current_idx;
 
   CUDA INLINE LightBranch(): current_idx(-1) {}

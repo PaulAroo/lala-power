@@ -316,7 +316,7 @@ public:
   }
 
   /** \return the current depth of the search tree. The root node has a depth of 0. */
-  CUDA size_t depth() const {
+  CUDA int depth() const {
     return stack.size();
   }
 
