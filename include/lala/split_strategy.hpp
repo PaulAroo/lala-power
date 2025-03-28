@@ -285,7 +285,10 @@ public:
     }
     if(val_order_str == "indomain_min") { strat.val_order = ValueOrder::MIN; }
     else if(val_order_str == "indomain_max") { strat.val_order = ValueOrder::MAX; }
-    else if(val_order_str == "indomain_median") { strat.val_order = ValueOrder::MEDIAN; }
+    else if(val_order_str == "indomain_median") {
+      printf("WARNING: indomain_median is not supported since we use interval domain. It is replaced by SPLIT");
+      strat.val_order = ValueOrder::SPLIT;
+    }
     else if(val_order_str == "indomain_split") { strat.val_order = ValueOrder::SPLIT; }
     else if(val_order_str == "indomain_reverse_split") { strat.val_order = ValueOrder::REVERSE_SPLIT; }
     else {
@@ -353,7 +356,7 @@ public:
       switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
-        case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());
+        // case ValueOrder::MEDIAN: return make_branch(x, EQ, NEQ, a->project(x).median().lb());
         case ValueOrder::SPLIT: return make_branch(x, LEQ, GT, a->project(x).median().lb());
         case ValueOrder::REVERSE_SPLIT: return make_branch(x, GT, LEQ, a->project(x).median().lb());
         default: printf("BUG: unsupported value order strategy\n"); assert(false); return branch_type(get_allocator());
