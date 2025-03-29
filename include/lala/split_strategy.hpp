@@ -44,6 +44,7 @@ struct StrategyType {
 
   VariableOrder var_order;
   ValueOrder val_order;
+  // An empty vector of variables means we should split on the underlying store directly.
   battery::vector<AVar, Allocator> vars;
 
   CUDA StrategyType(const Allocator& alloc = Allocator{})
@@ -142,9 +143,9 @@ private:
   CUDA NI void move_to_next_unassigned_var() {
     while(current_strategy < strategies.size()) {
       const auto& vars = current_vars();
-      while(next_unassigned_var < vars.size()) {
-        universe_type v{};
-        a->project(vars[next_unassigned_var], v);
+      int n = vars.empty() ? a->vars() : vars.size();
+      while(next_unassigned_var < n) {
+        universe_type v = (*a)[vars.empty() ? next_unassigned_var : vars[next_unassigned_var].vid()];
         if(v.lb().value() != v.ub().value()) {
           return;
         }
@@ -159,23 +160,24 @@ private:
   CUDA NI AVar var_map_fold_left(const battery::vector<AVar, allocator_type>& vars, MapFunction op) {
     int i = next_unassigned_var;
     int best_i = i;
-    auto best = op(a->project(vars[i]));
-    for(++i; i < vars.size(); ++i) {
-      const auto& u = a->project(vars[i]);
+    auto best = op((*a)[vars.empty() ? i : vars[i].vid()]);
+    int n = vars.empty() ? a->vars() : vars.size();
+    for(++i; i < n; ++i) {
+      const auto& u = (*a)[vars.empty() ? i : vars[i].vid()];
       if(u.lb().value() != u.ub().value()) {
         if(best.meet(op(u))) {
           best_i = i;
         }
       }
     }
-    return vars[best_i];
+    return vars.empty() ? AVar{a->aty(), best_i} : vars[best_i];
   }
 
   CUDA AVar select_var() {
     const auto& strat = strategies[current_strategy];
     const auto& vars = strat.vars;
     switch(strat.var_order) {
-      case VariableOrder::INPUT_ORDER: return vars[next_unassigned_var];
+      case VariableOrder::INPUT_ORDER: return vars.empty() ? AVar{a->aty(), next_unassigned_var} : vars[next_unassigned_var];
       case VariableOrder::FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return u.width().ub(); });
       case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.width().ub()); });
       case VariableOrder::LARGEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.ub()); });
@@ -310,9 +312,6 @@ public:
       // Ignore constant expressions.
       else {}
     }
-    if(strat.vars.size() == 0) {
-      RETURN_INTERPRETATION_WARNING("The predicate `search` has no variable, and thus it is ignored.");
-    }
     tell.push_back(std::move(strat));
     return true;
   }
@@ -331,10 +330,8 @@ public:
   CUDA local::B deduce(const tell_type<Alloc2>& t) {
     local::B has_changed = false;
     for(int i = 0; i < t.size(); ++i) {
-      if(t[i].vars.size() > 0) {
-        strategies.push_back(t[i]);
-        has_changed = true;
-      }
+      strategies.push_back(t[i]);
+      has_changed = true;
     }
     return has_changed;
   }
@@ -352,7 +349,7 @@ public:
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();
-      // printf("split on %d\n", x.vid());
+      // printf("split on %d (", x.vid()); a->project(x).print(); printf(")\n");
       switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
