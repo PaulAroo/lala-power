@@ -7,7 +7,9 @@
 #include "battery/shared_ptr.hpp"
 #include "branch.hpp"
 #include "lala/logic/logic.hpp"
+#include "lala/b.hpp"
 #include "lala/abstract_deps.hpp"
+#include <optional>
 
 namespace lala {
 
@@ -25,6 +27,39 @@ enum class VariableOrder {
   // RANDOM
 };
 
+inline const char* string_of_variable_order(VariableOrder order) {
+  switch(order) {
+    case VariableOrder::INPUT_ORDER: return "input_order";
+    case VariableOrder::FIRST_FAIL: return "first_fail";
+    case VariableOrder::ANTI_FIRST_FAIL: return "anti_first_fail";
+    case VariableOrder::SMALLEST: return "smallest";
+    case VariableOrder::LARGEST: return "largest";
+    default: return "unknown";
+  }
+}
+
+template <class StringType>
+std::optional<VariableOrder> variable_order_of_string(const StringType& str) {
+  if(str == "input_order") {
+    return VariableOrder::INPUT_ORDER;
+  }
+  else if(str == "first_fail") {
+    return VariableOrder::FIRST_FAIL;
+  }
+  else if(str == "anti_first_fail") {
+    return VariableOrder::ANTI_FIRST_FAIL;
+  }
+  else if(str == "smallest") {
+    return VariableOrder::SMALLEST;
+  }
+  else if(str == "largest") {
+    return VariableOrder::LARGEST;
+  }
+  else {
+    return std::nullopt;
+  }
+}
+
 enum class ValueOrder {
   MIN,
   MAX,
@@ -36,6 +71,39 @@ enum class ValueOrder {
   // RANDOM,
   // MIDDLE,
 };
+
+inline const char* string_of_value_order(ValueOrder order) {
+  switch(order) {
+    case ValueOrder::MIN: return "min";
+    case ValueOrder::MAX: return "max";
+    case ValueOrder::MEDIAN: return "median";
+    case ValueOrder::SPLIT: return "split";
+    case ValueOrder::REVERSE_SPLIT: return "reverse_split";
+    default: return "unknown";
+  }
+}
+
+template <class StringType>
+std::optional<ValueOrder> value_order_of_string(const StringType& str) {
+  if(str == "min") {
+    return ValueOrder::MIN;
+  }
+  else if(str == "max") {
+    return ValueOrder::MAX;
+  }
+  else if(str == "median") {
+    return ValueOrder::MEDIAN;
+  }
+  else if(str == "split") {
+    return ValueOrder::SPLIT;
+  }
+  else if(str == "reverse_split") {
+    return ValueOrder::REVERSE_SPLIT;
+  }
+  else {
+    return std::nullopt;
+  }
+}
 
 /** A split strategy consists of a variable order and value order on a subset of the variables. */
 template <class Allocator>
@@ -54,6 +122,7 @@ struct StrategyType {
   StrategyType(const StrategyType<Allocator>&) = default;
   StrategyType(StrategyType<Allocator>&&) = default;
   StrategyType& operator=(StrategyType<Allocator>&&) = default;
+  StrategyType& operator=(const StrategyType<Allocator>&) = default;
 
   CUDA StrategyType(VariableOrder var_order, ValueOrder val_order, battery::vector<AVar, Allocator>&& vars)
    : var_order(var_order), val_order(val_order), vars(std::move(vars))
@@ -369,11 +438,25 @@ public:
     return strategies.size();
   }
 
+  CUDA void push_eps_strategy(VariableOrder var_order, ValueOrder val_order) {
+    strategies.push_back(StrategyType<allocator_type>(strategies.get_allocator()));
+    for(int i = strategies.size() - 1; i > 0; --i) {
+      strategies[i] = strategies[i-1];
+    }
+    battery::vector<AVar, allocator_type> vars(strategies.get_allocator());
+    strategies[0] = StrategyType<allocator_type>(var_order, val_order, std::move(vars));
+  }
+
+  CUDA void skip_eps_strategy() {
+    current_strategy++;
+    next_unassigned_var = 0;
+  }
+
   CUDA const auto& strategies_() const {
     return strategies;
   }
 };
 
-}
+} // namespace lala
 
 #endif
