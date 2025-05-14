@@ -200,6 +200,7 @@ private:
   using UB = typename universe_type::UB;
 
   AType atype;
+  AType var_aty;
   abstract_ptr<A> a;
   battery::vector<StrategyType<allocator_type>, allocator_type> strategies;
   int current_strategy;
@@ -239,14 +240,14 @@ private:
         }
       }
     }
-    return vars.empty() ? AVar{a->aty(), best_i} : vars[best_i];
+    return vars.empty() ? AVar{var_aty, best_i} : vars[best_i];
   }
 
   CUDA AVar select_var() {
     const auto& strat = strategies[current_strategy];
     const auto& vars = strat.vars;
     switch(strat.var_order) {
-      case VariableOrder::INPUT_ORDER: return vars.empty() ? AVar{a->aty(), next_unassigned_var} : vars[next_unassigned_var];
+      case VariableOrder::INPUT_ORDER: return vars.empty() ? AVar{var_aty, next_unassigned_var} : vars[next_unassigned_var];
       case VariableOrder::FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return u.width().ub(); });
       case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.width().ub()); });
       case VariableOrder::LARGEST: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.ub()); });
@@ -291,13 +292,14 @@ private:
   }
 
 public:
-  CUDA SplitStrategy(AType atype, abstract_ptr<A> a, const allocator_type& alloc = allocator_type()):
-    atype(atype), a(a), current_strategy(0), next_unassigned_var(0), strategies(alloc)
+  CUDA SplitStrategy(AType atype, AType var_aty, abstract_ptr<A> a, const allocator_type& alloc = allocator_type()):
+    atype(atype), var_aty(var_aty), a(a), current_strategy(0), next_unassigned_var(0), strategies(alloc)
   {}
 
   template<class A2, class Alloc2, class... Allocators>
   CUDA SplitStrategy(const SplitStrategy<A2, Alloc2>& other, AbstractDeps<Allocators...>& deps)
    : atype(other.atype),
+     var_aty(other.var_aty),
      a(deps.template clone<A>(other.a)),
      strategies(other.strategies, deps.template get_allocator<allocator_type>()),
      current_strategy(other.current_strategy),
@@ -418,7 +420,7 @@ public:
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();
-      // printf("split on %d (", x.vid()); a->project(x).print(); printf(")\n");
+      printf("split on %d (", x.vid()); a->project(x).print(); printf(")\n");
       switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
@@ -448,7 +450,7 @@ public:
   }
 
   CUDA void skip_eps_strategy() {
-    current_strategy++;
+    current_strategy = std::max(1, current_strategy);
     next_unassigned_var = 0;
   }
 
