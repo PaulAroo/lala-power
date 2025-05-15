@@ -420,7 +420,7 @@ public:
     move_to_next_unassigned_var();
     if(current_strategy < strategies.size()) {
       AVar x = select_var();
-      printf("split on %d (", x.vid()); a->project(x).print(); printf(")\n");
+      // printf("split on %d (", x.vid()); a->project(x).print(); printf(")\n");
       switch(strategies[current_strategy].val_order) {
         case ValueOrder::MIN: return make_branch(x, EQ, GT, a->project(x).lb());
         case ValueOrder::MAX: return make_branch(x, EQ, LT, a->project(x).ub());
