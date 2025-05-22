@@ -29,7 +29,7 @@ TEST(SearchTreeTest, EnumerationSolution) {
   EXPECT_TRUE(f);
   VarEnv<standard_allocator> env;
   auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
-  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store->aty(), store);
   auto search_tree = ST(env.extends_abstract_dom(), store, split);
 
   EXPECT_TRUE(search_tree.is_top());
@@ -86,7 +86,7 @@ TEST(SearchTreeTest, ConstrainedEnumeration) {
   VarEnv<standard_allocator> env;
   auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 3);
   auto ipc = make_shared<IPC, standard_allocator>(IPC(env.extends_abstract_dom(), store));
-  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
+  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), store->aty(), ipc);
   auto search_tree = IST(env.extends_abstract_dom(), ipc, split);
 
   EXPECT_TRUE(search_tree.is_top());

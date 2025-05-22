@@ -34,7 +34,7 @@ void test_strategy(
   shared_ptr<IStore, standard_allocator> store =
     make_shared<IStore, standard_allocator>(store_res.value());
   shared_ptr<SplitStrategy<IStore>> split =
-    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store->aty(), store);
   auto strat = parser.parse(
     "solve::int_search([x1,x2,x3,x4,x5,x6,x7], " + variable_order + ", " + value_order + ", complete) satisfy;");
   EXPECT_TRUE(strat);
@@ -91,7 +91,7 @@ TEST(BranchTest, CopySplitStrategy) {
   shared_ptr<IStore, standard_allocator> store =
     make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), 0);
   shared_ptr<SplitStrategy<IStore>> split =
-    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+    make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store->aty(), store);
   AbstractDeps<standard_allocator> deps{standard_allocator()};
   auto r = deps.template clone<SplitStrategy<AIStore>>(split);
 }

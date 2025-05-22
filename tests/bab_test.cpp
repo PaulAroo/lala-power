@@ -26,7 +26,7 @@ void test_unconstrained_bab(bool mode) {
   VarEnv<standard_allocator> env;
   const size_t num_vars = 3;
   auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), num_vars);
-  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store);
+  auto split = make_shared<SplitStrategy<IStore>, standard_allocator>(env.extends_abstract_dom(), store->aty(), store);
   auto search_tree = make_shared<ST, standard_allocator>(env.extends_abstract_dom(), store, split);
   // Best is a copy of the store, therefore it must have the same abstract type (in particular, when projecting the variable).
   auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
@@ -85,7 +85,7 @@ void test_constrained_bab(bool mode) {
   const size_t num_vars = 3;
   auto store = make_shared<IStore, standard_allocator>(env.extends_abstract_dom(), num_vars);
   auto ipc = make_shared<IPC, standard_allocator>(IPC(env.extends_abstract_dom(), store));
-  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), ipc);
+  auto split = make_shared<SplitStrategy<IPC>, standard_allocator>(env.extends_abstract_dom(), store->aty(), ipc);
   auto search_tree = make_shared<IST, standard_allocator>(env.extends_abstract_dom(), ipc, split);
   // Best is a copy of the store, therefore it must have the same abstract type (in particular, when projecting the variable).
   auto best = make_shared<IStore, standard_allocator>(store->aty(), num_vars);
