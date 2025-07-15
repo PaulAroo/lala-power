@@ -10,6 +10,8 @@
 #include "lala/b.hpp"
 #include "lala/abstract_deps.hpp"
 #include <optional>
+#include <random>
+#include <algorithm>
 
 namespace lala {
 
@@ -19,12 +21,12 @@ enum class VariableOrder {
   ANTI_FIRST_FAIL,
   SMALLEST,
   LARGEST,
+  RANDOM
   // unsupported:
   // OCCURRENCE,
   // MOST_CONSTRAINED,
   // MAX_REGRET,
   // DOM_W_DEG,
-  // RANDOM
 };
 
 inline const char* string_of_variable_order(VariableOrder order) {
@@ -34,6 +36,7 @@ inline const char* string_of_variable_order(VariableOrder order) {
     case VariableOrder::ANTI_FIRST_FAIL: return "anti_first_fail";
     case VariableOrder::SMALLEST: return "smallest";
     case VariableOrder::LARGEST: return "largest";
+    case VariableOrder::RANDOM: return "random";
     default: return "unknown";
   }
 }
@@ -54,6 +57,9 @@ std::optional<VariableOrder> variable_order_of_string(const StringType& str) {
   }
   else if(str == "largest") {
     return VariableOrder::LARGEST;
+  }
+  else if(str == "random") {
+    return VariableOrder::RANDOM;
   }
   else {
     return std::nullopt;
@@ -247,6 +253,7 @@ private:
     const auto& strat = strategies[current_strategy];
     const auto& vars = strat.vars;
     switch(strat.var_order) {
+      case VariableOrder::RANDOM:
       case VariableOrder::INPUT_ORDER: return vars.empty() ? AVar{var_aty, next_unassigned_var} : vars[next_unassigned_var];
       case VariableOrder::FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return u.width().ub(); });
       case VariableOrder::ANTI_FIRST_FAIL: return var_map_fold_left(vars, [](const universe_type& u) { return dual_bound<LB>(u.width().ub()); });
@@ -353,6 +360,7 @@ public:
     else if(var_order_str == "anti_first_fail") { strat.var_order = VariableOrder::ANTI_FIRST_FAIL; }
     else if(var_order_str == "smallest") { strat.var_order = VariableOrder::SMALLEST; }
     else if(var_order_str == "largest") { strat.var_order = VariableOrder::LARGEST; }
+    else if(var_order_str == "random") { strat.var_order = VariableOrder::RANDOM; }
     else {
       RETURN_INTERPRETATION_ERROR("This variable order strategy is unsupported.");
     }
@@ -456,6 +464,20 @@ public:
 
   CUDA const auto& strategies_() const {
     return strategies;
+  }
+
+  void shuffle_random_strategies(std::mt19937& g) {
+    for(int i = 0; i < strategies.size(); ++i) {
+      if(strategies[i].var_order == VariableOrder::RANDOM) {
+        if(strategies[i].vars.empty()) {
+          strategies[i].vars.reserve(a->vars());
+          for(int j = 0; j < a->vars(); ++j) {
+            strategies[i].vars.push_back(AVar{var_aty, j});
+          }
+        }
+        std::shuffle(strategies[i].vars.data(), strategies[i].vars.data() + strategies[i].vars.size(), g);
+      }
+    }
   }
 };
 
