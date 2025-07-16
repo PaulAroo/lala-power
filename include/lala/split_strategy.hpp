@@ -10,7 +10,6 @@
 #include "lala/b.hpp"
 #include "lala/abstract_deps.hpp"
 #include <optional>
-#include <random>
 #include <algorithm>
 
 namespace lala {
@@ -466,7 +465,8 @@ public:
     return strategies;
   }
 
-  void shuffle_random_strategies(std::mt19937& g) {
+  template<typename URBG>
+  void shuffle_random_strategies(URBG& g) {
     for(int i = 0; i < strategies.size(); ++i) {
       if(strategies[i].var_order == VariableOrder::RANDOM) {
         if(strategies[i].vars.empty()) {
